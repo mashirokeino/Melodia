@@ -63,6 +63,7 @@ import com.music.lyricshare.skin.FontSpec
 import com.music.lyricshare.skin.FontSource
 import com.music.lyricshare.skin.ImageShape
 import com.music.lyricshare.skin.SkinEditable
+import kotlin.math.roundToInt
 
 /**
  * ============================================================================
@@ -454,7 +455,12 @@ private fun SwitchRow(
     }
 }
 
-/** 一行滑块：左标签、右数值、下方滑杆。 */
+/**
+ * 一行滑块：左标签、右数值、下方滑杆。
+ *
+ * **颗粒度固定 1%**（0.01）：值会被吸附到 0.01 的整数倍，并把这个步数交给 Slider，
+ * 所以拖动时是"一格一格"跳的，不会出现 63.7% 这种没意义的精度。
+ */
 @Composable
 private fun SliderRow(
     label: String,
@@ -464,17 +470,29 @@ private fun SliderRow(
     onValueChange: (Float) -> Unit,
 ) {
     val tokens = LocalLyricShareTokens.current
+    val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
+    // 1% 一档；上限 400 档是防止极端区间让 Slider 画满刻度
+    val stepCount = (span / SLIDER_STEP).roundToInt().coerceIn(1, 400)
+    val snapped = snapToStep(value, range.start, span, stepCount)
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = tokens.onSurface, fontSize = tokens.textBody, modifier = Modifier.weight(1f))
             Text(valueText, color = tokens.onSurfaceVariant, fontSize = tokens.textLabel)
         }
         Slider(
-            value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onValueChange,
+            value = snapped,
+            onValueChange = { raw -> onValueChange(snapToStep(raw, range.start, span, stepCount)) },
             valueRange = range,
+            steps = (stepCount - 1).coerceAtLeast(0),
         )
     }
+}
+
+/** 把值吸附到"1% 一档"的最近一档。 */
+private fun snapToStep(value: Float, start: Float, span: Float, stepCount: Int): Float {
+    val clamped = value.coerceIn(start, start + span)
+    val ticks = ((clamped - start) / span * stepCount).roundToInt().coerceIn(0, stepCount)
+    return start + span * ticks / stepCount
 }
 
 /**
@@ -697,6 +715,9 @@ private fun FontOption(
         }
     }
 }
+
+/** 滑杆颗粒度：1%（0.01）。 */
+private const val SLIDER_STEP = 0.01f
 
 /** 背景底色的预设色卡。 */
 private val BackgroundSwatches = listOf(

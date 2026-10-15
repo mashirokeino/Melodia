@@ -249,9 +249,16 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         }
         // 样式二：先把「歌名+艺人」块按信息带宽度量出来；比二维码高就撑高画布，避免压到歌词
         val qrMeasured = measured.firstOrNull { it.el.type == ElementType.QRCODE }
+        // 信息带里文字的左边界：跟随标题元素自己声明的 x（胶片黑是 72），
+        // 二维码在左时再让开它的宽度 + 间距 —— 否则文字会贴着画布左边缘，与正文不对齐
+        val songInfoGap = 32.px(scale)
+        val songInfoBandLeft = if (songInfoMode && qrMeasured != null) {
+            songInfoBandLeft(titleElement, qrMeasured, padLeft, scale, songInfoGap)
+        } else {
+            padLeft
+        }
         val songInfoLayouts = if (songInfoMode && qrMeasured != null) {
-            val gap = 32.px(scale)
-            val bandWidth = (outputWidth - padLeft - padRight - qrMeasured.width - gap).coerceAtLeast(1)
+            val bandWidth = (outputWidth - songInfoBandLeft - padRight).coerceAtLeast(1)
             buildSongInfoLayouts(titleElement, artistsElement, bandWidth, defaults, skin, options, data, scale)
         } else {
             null
@@ -293,6 +300,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
                 artistsEl = artistsElement,
                 qrMeasured = qrMeasured,
                 layouts = songInfoLayouts,
+                bandLeft = songInfoBandLeft,
                 padLeft = padLeft,
                 padRight = padRight,
                 padBottom = padBottom,
@@ -680,6 +688,19 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         )
     }
 
+    /** 样式二：信息带里文字的左边界（= 皮肤给标题声明的 x；二维码在左时再让开它的宽度与间距）。 */
+    private fun songInfoBandLeft(
+        titleEl: SkinElement,
+        qrMeasured: Measured,
+        padLeft: Int,
+        scale: Float,
+        gap: Int,
+    ): Int {
+        val inset = padLeft + if (titleEl.x.align == HAlign.LEFT) titleEl.x.offset.px(scale) else 0
+        val qrAtLeft = qrMeasured.edit.placement == ElementPlacement.BOTTOM_LEFT
+        return if (qrAtLeft) max(inset, padLeft + qrMeasured.width + gap) else inset
+    }
+
     /** 样式二里「歌名 + 艺人」两段文本的布局结果。 */
     private class SongInfoLayout(
         val title: StaticLayout,
@@ -728,6 +749,8 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         artistsEl: SkinElement?,
         qrMeasured: Measured?,
         layouts: SongInfoLayout,
+        /** 文字块的左边界（已含标题声明的 x 与二维码让位）。 */
+        bandLeft: Int,
         padLeft: Int,
         padRight: Int,
         padBottom: Int,
@@ -737,7 +760,6 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         temporaries: MutableList<Bitmap>,
         effectiveCover: Bitmap?,
     ) {
-        val gap = 32.px(scale)
         val qrW = qrMeasured?.width ?: 0
         val qrH = qrMeasured?.height ?: 0
         // 二维码自己的锚点（通用属性 PLACEMENT）决定它在这一行的左侧还是右侧
@@ -751,7 +773,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             drawQr(canvas, qr, qx, qy, skin, data, options, temporaries, effectiveCover)
         }
 
-        val textX = if (qrAtLeft) padLeft + qrW + gap else padLeft
+        val textX = bandLeft
         val textY = bandTop + (bandHeight - layouts.height) / 2
         canvas.save()
         canvas.translate(textX.toFloat(), textY.toFloat())

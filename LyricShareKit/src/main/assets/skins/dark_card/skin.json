@@ -220,7 +220,6 @@
             "control": "enum",
             "label": "放置位置",
             "options": [
-              "skin",
               "left",
               "center",
               "right"
