@@ -18,9 +18,15 @@
 | 默认使用系统图片选择器 | 「封面」「背景」入口点开后走 `ActivityResultContracts.PickVisualMedia`（Android 13+ 系统相册，低版本自动回落） |
 | 封面/背景由**皮肤包声明** | 皮肤在图片元素/背景上写 `editable`，界面据此**动态生成**入口与二级面板（换图/显隐/形状/大小/位置）；没声明就不出现。见 [皮肤制作指南 §4.4.2](docs/皮肤制作指南.md) |
 | 可选择是否添加封面、形状、大小 | 二级面板：`显示封面`开关、形状（直角/圆角/圆形）、大小滑块——选项与范围都由皮肤声明 |
-| 背景可调位置、大小 | 二级面板：水平/垂直位置、缩放；出图与预览一致（同一台引擎） |
+| 背景可调位置、大小、纯色 | 二级面板：水平/垂直位置、缩放、**纯色色卡**（首张"跟随播放页"= 宿主传的 `baseColor`）；出图与预览一致 |
+| 歌名/艺人版式可声明 | `canvas.songInfo.mode = "above" \| "besideQr"`：后者把歌名+艺人挪到底部与二维码并排 |
+| 长歌词不截断 | 皮肤不写 `maxLines`，画布按内容自动加高；预览**铺满宽度 + 上下滚动**，长图不缩成小卡片 |
+| **界面入口由皮肤声明** | 模块里没有硬编码的「封面/背景/字体/二维码」清单：扫描皮肤所有 `editable` 声明，一项渲染一个入口（名字/顺序/面板内容全来自声明） |
+| 每个皮肤设置独立 | 用户调整按「皮肤 id + 可编辑项 id」各存一份，来回切换互不影响 |
+| **调整会持久保存** | 换过的封面/背景、调好的颜色/大小/位置/字体**下次进页面自动读回**（含用户从相册选的图片，单独落盘）；重置清掉该项，删皮肤清掉它的全部 |
+| 可重置 | 二级面板标题行常驻「重置」（封面/背景/字体都有） |
 | 预览要清晰、且与出图零偏差 | 预览**不降分辨率**：和导出共用同一个渲染宽度（皮肤参考宽度，默认 1080）与同一台引擎，界面只做高清缩放；预览位图直接复用于导出 |
-| 二维码生成保留 | `qr/QrCodeGenerator.kt`（ZXing，纠错级别/静默区/中心 logo 可配） |
+| 二维码生成保留 + 开关 | `qr/QrCodeGenerator.kt`（ZXing）。内容**默认按 `songId` 生成这首歌的网页链接**，页面上有显示开关 |
 | 「来自 XXX」隐藏，且成图不预留 | 默认 `showBrandElement = false`，`role:"brand"` 元素**不参与度量**，下面元素自然上移 |
 | 分享时可选择本地保存或原生分享 | 底部弹层：`保存到相册` / `系统分享`（`share/ImageExporter.kt`） |
 | UI 注释清楚、方便视觉统一 | `ui/LyricShareTokens.kt`（唯一取值来源）+ 每个 Composable 都有职责注释 |
@@ -239,7 +245,7 @@ LyricShareKit.fontProvider(context).userFonts()                // 用户导入�
 {
   "id": "my_skin", "name": "我的皮肤", "schemaVersion": 1,
   "canvas": {
-    "width": 1080, "minHeight": 1440,
+    "width": 1080,
     "padding": { "left": 72, "top": 96, "right": 72, "bottom": 72 },
     "background": { "type": "image", "useCover": true, "blur": 48, "scrim": { "color": "#000000", "opacity": 0.7 } }
   },
@@ -247,9 +253,9 @@ LyricShareKit.fontProvider(context).userFonts()                // 用户导入�
   "elements": [
     { "type": "image", "useCover": true, "width": 420, "height": 420, "x": "center", "circle": true,
       "editable": { "label": "封面", "shapes": ["circle", "rounded", "rect"], "sizeRange": [0.6, 1.4] } },
-    { "type": "text",  "text": "{title}",   "size": 48, "maxLines": 1, "marginTop": 48 },
-    { "type": "text",  "text": "{artists}", "size": 30, "maxLines": 1, "marginTop": 10 },
-    { "type": "lyric", "maxLines": 12, "marginTop": 64 },
+    { "type": "text",  "text": "{title}",   "size": 48, "marginTop": 48 },   // 同样不写 maxLines，长标题自动换行
+    { "type": "text",  "text": "{artists}", "size": 30, "marginTop": 10 },
+    { "type": "lyric", "marginTop": 64 },          // 不写 maxLines：有多少歌词就画多少，画布自动加高
     { "type": "qrcode", "width": 132, "height": 132, "x": "center", "marginTop": 72,
       "qr": { "errorCorrection": "Q", "quietZone": 1 } }
   ]
@@ -262,8 +268,10 @@ LyricShareKit.fontProvider(context).userFonts()                // 用户导入�
 - **颜色一律写 `#RRGGBB`**（出图不需要 alpha 通道）；需要半透明（压暗层、阴影）就加一个独立的
   `"opacity": 0~1` 字段，不要再写 `#AARRGGBB`（仍兼容，但示例与规范都不用）。
 - 不需要来源文案就**别写**这类元素；写了标 `"role": "brand"` 也默认不画且不占位。
-- 想让用户在界面上换封面/背景、改形状大小位置，就在对应元素/背景上写 `editable`（见指南 §4.4.2）；
-  **不写就没有入口**，界面上不会出现多余按钮。
+- 想让用户在界面上调什么，就在对应元素 / `canvas.background` / `defaults` 上写 `editable`（见指南 §4.4.2）；
+  **界面上的入口完全由这些声明生成**（模块不硬编码），不写就没有入口。
+- **歌词/标题别写 `maxLines`**：写了超出就会截断成 `…`；不写则画布自动加高（预览支持上下滚动）。
+- **别用 `canvas.minHeight` 撑高度**：歌词少的时候会被撑成一张大卡片。
 - 皮肤列表的缩略图由引擎实时渲染，**不需要单独准备预览图**。
 - 内置：放 `assets/skins/<id>/`；下发：打成 zip（`skin.json` 在根目录）→ `installSkin(zip, md5)`。
 

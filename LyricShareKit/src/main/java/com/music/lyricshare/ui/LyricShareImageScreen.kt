@@ -57,6 +57,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -95,6 +96,8 @@ import com.music.lyricshare.skin.SkinSource
 import com.music.lyricshare.toast
 import java.io.File
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -173,6 +176,9 @@ private suspend fun <T> runCatchingNoCancel(block: suspend () -> T): Result<T> =
     Result.failure(throwable)
 }
 
+/** 用户调整写盘的防抖时长：连续拖动只在停下来之后写一次。 */
+private const val PERSIST_DEBOUNCE_MS = 300L
+
 /**
  * ============================================================================
  *  歌词图片生成页
@@ -199,6 +205,8 @@ fun LyricShareImageScreen(
 
     // 渲染依赖（进程级单例，install 幂等）
     val renderer = remember(context) { LyricShareKit.renderer(context) }
+    /** 用户调整的持久化仓库：下次进来把上次调好的样子读回来。 */
+    val editStore = remember(context) { LyricShareKit.editStateStore(context) }
     val fontProvider = remember(context) { LyricShareKit.fontProvider(context) }
     // 可变：导入皮肤后要立刻刷新列表
     var skins by remember(context) { mutableStateOf(LyricShareKit.skins(context)) }
@@ -211,6 +219,8 @@ fun LyricShareImageScreen(
      * 换皮肤再换回来、或皮肤新增了声明的项，都不会互相污染。
      */
     val adjustmentsBySkin = remember { mutableStateMapOf<String, Map<String, EditState>>() }
+    /** 落盘任务（防抖）：拖滑杆时只有最后一次写盘。 */
+    var persistJob by remember { mutableStateOf<Job?>(null) }
     /** 二维码内容：显式传入优先，否则按 songId 自动生成（默认是这首歌的网页链接）。 */
     val qrContent = remember(request) { request.resolvedQrContent() }
     var activeEditId by remember { mutableStateOf<String?>(null) }      // 当前打开哪个可编辑项的面板
@@ -238,6 +248,12 @@ fun LyricShareImageScreen(
     fun editStateFor(id: String): EditState = edits[id] ?: EditState()
     fun updateEdit(id: String, next: EditState) {
         adjustmentsBySkin[skinKey] = edits + (id to next)
+        // 防抖落盘：连续拖动只在停下来 300ms 后写一次
+        persistJob?.cancel()
+        persistJob = scope.launch {
+            delay(PERSIST_DEBOUNCE_MS)
+            withContext(Dispatchers.IO) { editStore.save(skinKey, adjustmentsBySkin[skinKey].orEmpty()) }
+        }
     }
 
     /**
@@ -268,6 +284,26 @@ fun LyricShareImageScreen(
         ?.let { editStateFor(it.id) } ?: EditState()
 
     val showQrCode = qrEdit.visible
+
+    // 切到某套皮肤时，把上次存下来的调整读回来（内存里已有的以内存为准，避免覆盖刚做的修改）
+    LaunchedEffect(skinKey) {
+        if (skinKey.isEmpty()) return@LaunchedEffect
+        val saved = withContext(Dispatchers.IO) { editStore.load(skinKey) }
+        if (saved.isNotEmpty()) {
+            adjustmentsBySkin[skinKey] = saved + adjustmentsBySkin[skinKey].orEmpty()
+        }
+    }
+
+    // 离开页面 / 切皮肤：把还在防抖里的那次修改补写一次（用进程级作用域，页面销毁也能写完）
+    DisposableEffect(skinKey) {
+        onDispose {
+            persistJob?.cancel()
+            val snapshot = adjustmentsBySkin[skinKey].orEmpty()
+            if (skinKey.isNotEmpty() && snapshot.isNotEmpty()) {
+                LyricShareKit.ioScope.launch { editStore.save(skinKey, snapshot) }
+            }
+        }
+    }
 
     /** 用户换过图的封面优先；否则用播放器给的专辑图。 */
     val effectiveCover = coverEdit.bitmap ?: albumCover
@@ -646,7 +682,7 @@ private fun PreviewArea(
 ) {
     val tokens = LocalLyricShareTokens.current
     val scrollState = rememberScrollState()
-    Box(
+    BoxWithConstraints(
         modifier = modifier.padding(horizontal = tokens.spacingLg, vertical = tokens.spacingSm),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -655,12 +691,17 @@ private fun PreviewArea(
 
             preview != null -> {
                 val ratio = preview.width.toFloat() / preview.height.toFloat()
+                // 海报比可视区矮时上下居中：那块空间属于预览容器本身，
+                // 居中后它看起来是"留白"，而不会像"缩短了却没生效"
+                val posterHeight = maxWidth / ratio
+                val topGap = ((maxHeight - posterHeight) / 2).coerceAtLeast(0.dp)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(scrollState),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Spacer(Modifier.height(topGap))
                     Image(
                         bitmap = preview.asImageBitmap(),
                         contentDescription = "生成效果预览",
@@ -673,7 +714,7 @@ private fun PreviewArea(
                             .border(1.dp, tokens.outline, RoundedCornerShape(tokens.radiusMd)),
                     )
                     // 底部留一点呼吸空间，滚到底时不会贴着操作面板
-                    Spacer(Modifier.height(tokens.spacingSm))
+                    Spacer(Modifier.height(maxOf(tokens.spacingSm, topGap)))
                 }
             }
 

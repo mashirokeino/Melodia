@@ -12,9 +12,12 @@ import com.music.lyricshare.render.RenderOptions
 import com.music.lyricshare.share.ImageExporter
 import com.music.lyricshare.skin.FontSpec
 import com.music.lyricshare.skin.LoadedSkin
+import com.music.lyricshare.edit.EditStateStore
 import com.music.lyricshare.skin.SkinRepository
 import com.music.lyricshare.util.BitmapUtils
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 
 /**
@@ -106,7 +109,14 @@ object LyricShareKit {
     private val lock = Any()
 
     private var appContext: Context? = null
+    /**
+     * 进程级 IO 作用域：用于**页面销毁后仍要落盘**的写入
+     * （用户最后一次调整还在 debounce 里就返回了，也要能存住）。
+     */
+    internal val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private var skinRepositoryRef: SkinRepository? = null
+    private var editStateStoreRef: EditStateStore? = null
     private var fontProviderRef: FontProvider? = null
     private var rendererRef: LyricImageRenderer? = null
 
@@ -154,7 +164,18 @@ object LyricShareKit {
         val repo = skinRepositoryRef ?: return false
         if (skinId !in repo.downloadedIds()) return false
         repo.remove(skinId)
+        // 皮肤没了，它保存的用户调整（含换过的图）也一起清掉
+        editStateStoreRef?.clear(skinId)
         return true
+    }
+
+    /**
+     * 用户调整的持久化仓库：**按皮肤**记住用户这次调好的封面/背景/字体/二维码，
+     * 下次进页面自动读回来（含用户从相册选的图片）。
+     */
+    fun editStateStore(context: Context): EditStateStore {
+        install(context)
+        return requireNotNull(editStateStoreRef)
     }
 
     fun fontProvider(context: Context): FontProvider {
