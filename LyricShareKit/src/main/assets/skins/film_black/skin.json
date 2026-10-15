@@ -69,9 +69,6 @@
           }
         ]
       }
-    },
-    "songInfo": {
-      "mode": "besideQr"
     }
   },
   "defaults": {
@@ -161,24 +158,6 @@
       }
     },
     {
-      "type": "text",
-      "role": "title",
-      "text": "{title}",
-      "size": 36,
-      "color": "#FFFFFF",
-      "x": 72,
-      "marginTop": 56
-    },
-    {
-      "type": "text",
-      "role": "artists",
-      "text": "{artists}",
-      "size": 30,
-      "color": "#FFFFFF",
-      "x": 72,
-      "marginTop": 12
-    },
-    {
       "type": "lyric",
       "size": 42,
       "color": "#E6E6E6",
@@ -187,60 +166,129 @@
       "marginTop": 48
     },
     {
-      "type": "qrcode",
-      "width": 140,
-      "height": 140,
-      "x": "right",
-      "marginRight": 0,
+      "type": "group",
+      "orientation": "row",
+      "gap": 32,
+      "crossAlign": "center",
+      "x": 72,
       "marginTop": 72,
-      "color": "#000000",
-      "qr": {
-        "errorCorrection": "M",
-        "quietZone": 0,
-        "backgroundColor": "#FFFFFF"
-      },
       "editable": {
-        "id": "qr",
+        "id": "songinfo",
         "order": 4,
-        "label": "二维码",
+        "label": "歌曲信息",
         "controls": [
           {
             "property": "visible",
             "control": "switch",
-            "label": "显示二维码"
-          },
-          {
-            "property": "placement",
-            "control": "enum",
-            "label": "放置位置",
-            "options": [
-              "left",
-              "center",
-              "right"
-            ]
-          },
-          {
-            "property": "color",
-            "control": "color",
-            "label": "二维码颜色"
-          },
-          {
-            "property": "background",
-            "control": "color",
-            "label": "底色",
-            "allowTransparent": true
+            "label": "显示歌曲信息"
           },
           {
             "property": "scale",
             "control": "slider",
             "label": "大小",
             "range": [
-              0.5,
-              2.0
+              0.6,
+              1.4
+            ]
+          },
+          {
+            "property": "offset_x",
+            "control": "slider",
+            "label": "水平位置",
+            "range": [
+              -0.25,
+              0.25
+            ]
+          },
+          {
+            "property": "offset_y",
+            "control": "slider",
+            "label": "垂直位置",
+            "range": [
+              -0.25,
+              0.25
             ]
           }
         ]
-      }
+      },
+      "children": [
+        {
+          "type": "group",
+          "orientation": "column",
+          "gap": 12,
+          "crossAlign": "start",
+          "children": [
+            {
+              "type": "text",
+              "role": "title",
+              "text": "{title}",
+              "size": 36,
+              "color": "#FFFFFF",
+              "lineSpacing": 6
+            },
+            {
+              "type": "text",
+              "role": "artists",
+              "text": "{artists}",
+              "size": 30,
+              "color": "#FFFFFF",
+              "lineSpacing": 6
+            }
+          ]
+        },
+        {
+          "type": "qrcode",
+          "width": 140,
+          "height": 140,
+          "color": "#000000",
+          "qr": {
+            "errorCorrection": "M",
+            "quietZone": 0,
+            "backgroundColor": "#FFFFFF"
+          },
+          "editable": {
+            "id": "qr",
+            "order": 5,
+            "label": "二维码",
+            "controls": [
+              {
+                "property": "visible",
+                "control": "switch",
+                "label": "显示二维码"
+              },
+              {
+                "property": "placement",
+                "control": "enum",
+                "label": "放置位置",
+                "options": [
+                  "left",
+                  "right"
+                ]
+              },
+              {
+                "property": "color",
+                "control": "color",
+                "label": "二维码颜色"
+              },
+              {
+                "property": "background",
+                "control": "color",
+                "label": "底色",
+                "allowTransparent": true
+              },
+              {
+                "property": "scale",
+                "control": "slider",
+                "label": "大小",
+                "range": [
+                  0.5,
+                  2.0
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

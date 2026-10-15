@@ -270,8 +270,8 @@ fun LyricShareImageScreen(
     //   元素序号 → 该项自己的 EditState（引擎按属性通用应用）
     //   EditableOwner.Background → 画布背景
     //   EditableOwner.TextDefaults → 文本默认样式（字体/颜色）
-    val elementEdits: Map<Int, EditState> = editables.mapNotNull { entry ->
-        (entry.owner as? EditableOwner.Element)?.let { it.index to editStateFor(entry.id) }
+    val elementEdits: Map<String, EditState> = editables.mapNotNull { entry ->
+        (entry.owner as? EditableOwner.Element)?.let { it.key to editStateFor(entry.id) }
     }.toMap()
     val backgroundEdit: EditState = editables.firstOrNull { it.owner == EditableOwner.Background }
         ?.let { editStateFor(it.id) } ?: EditState()

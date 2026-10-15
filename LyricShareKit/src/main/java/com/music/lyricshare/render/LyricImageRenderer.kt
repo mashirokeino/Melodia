@@ -29,7 +29,6 @@ import com.music.lyricshare.skin.ScaleType
 import com.music.lyricshare.skin.GroupOrientation
 import com.music.lyricshare.skin.ShadowSpec
 import com.music.lyricshare.skin.SkinElement
-import com.music.lyricshare.skin.SongInfoMode
 import com.music.lyricshare.skin.VMode
 import com.music.lyricshare.util.BitmapUtils
 import com.music.lyricshare.util.BlurUtils
@@ -123,13 +122,13 @@ data class RenderOptions(
     /** 是否绘制 role=="brand" 的元素（"来自 XXX"）。默认 false：不画也不预留。 */
     val showBrandElement: Boolean = false,
     /**
-     * **元素序号 → 用户调整**。
+     * **元素路径 → 用户调整**（顶层是 `"3"`，组合子元素是 `"3.1"`）。
      *
      * 引擎不知道"这是封面还是二维码"：它只按 [EditState] 里被设过的属性通用地作用到该元素上
-     * （COLOR / BACKGROUND / SCALE / SHAPE / SOURCE / 位移 / 锚点 / 显隐）。
-     * 序号 = 皮肤 `elements` 的下标；上层把皮肤声明的可编辑项 id 映射成序号。
+     * （COLOR / BACKGROUND / SCALE / SHAPE / SOURCE / 位移 / 锚点 / 显隐）——
+     * **顶层元素与组合子元素走完全相同的语义**。
      */
-    val elementEdits: Map<Int, EditState> = emptyMap(),
+    val elementEdits: Map<String, EditState> = emptyMap(),
     /** 画布背景的用户调整（换图 / 纯色 / 缩放 / 平移 / 显隐）。 */
     val backgroundEdit: EditState = EditState(),
     /** 文本默认样式的用户调整（字体 / 颜色）—— 元素自身没设时生效。 */
@@ -195,28 +194,22 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         // 用户调整：按元素序号取（引擎不关心元素"是什么"，只按属性通用应用）
         val backgroundEdit = options.backgroundEdit
         val textEdit = options.textEdit
-        fun editOf(index: Int): EditState = options.elementEdits[index] ?: EditState.NONE
+        fun editOf(path: List<Int>): EditState =
+            options.elementEdits[path.joinToString(".")] ?: EditState.NONE
         // 封面位换过图就用用户选的，否则用调用方给的（专辑图）
         val coverSlotIndex = spec.elements.indexOfFirst { it.isCoverSlot }
-        val effectiveCover = if (coverSlotIndex >= 0) editOf(coverSlotIndex).bitmap ?: data.cover else data.cover
-
-        // 样式二的判定：需要二维码真的会画出来，且皮肤里声明了 role:"title"
-        val qrWillRender = spec.elements.any { it.type == ElementType.QRCODE } &&
-            options.showQrCode && !data.qrContent.isNullOrBlank()
-        val titleElement = spec.elements.firstOrNull { it.role.equals("title", ignoreCase = true) }
-        val artistsElement = spec.elements.firstOrNull { it.role.equals("artists", ignoreCase = true) }
-        // 版式由皮肤决定：canvas.songInfo.mode == "besideQr" 即样式二
-        val songInfoMode = canvasSpec.songInfo.mode == SongInfoMode.BESIDE_QR &&
-            qrWillRender && titleElement != null
+        val effectiveCover = if (coverSlotIndex >= 0) {
+            editOf(listOf(coverSlotIndex)).bitmap ?: data.cover
+        } else {
+            data.cover
+        }
 
         // ---------------- 0) 元素过滤：被关掉的东西直接不进布局，也就不占空间 ----------------
         val visibleIndexed = spec.elements.withIndex().filter { (index, el) ->
-            val edit = editOf(index)
+            val edit = editOf(listOf(index))
             when {
                 !edit.visible -> false                                   // 用户显式关掉
                 el.isBrand && !options.showBrandElement -> false
-                // 样式二：歌名/艺人改由底部信息带绘制，从流式里摘掉（不留空洞）
-                songInfoMode && (el === titleElement || el === artistsElement) -> false
                 el.type == ElementType.QRCODE && (!options.showQrCode || data.qrContent.isNullOrBlank()) -> false
                 el.type == ElementType.IMAGE && el.useCover && effectiveCover == null -> false
                 else -> true
@@ -231,7 +224,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
 
         // ---------------- 1) 度量 + 流式排版 ----------------
         val measured = visibleIndexed.mapNotNull { (index, el) ->
-            measure(el, editOf(index), contentWidth, defaults, skin, options, data, scale)
+            measure(el, editOf(listOf(index)), listOf(index), contentWidth, defaults, skin, options, data, scale)
         }
 
         val flowY = HashMap<Int, Int>(measured.size)
@@ -247,24 +240,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
                 cursor = y + m.height + el.margin.bottom.px(scale)
             }
         }
-        // 样式二：先把「歌名+艺人」块按信息带宽度量出来；比二维码高就撑高画布，避免压到歌词
-        val qrMeasured = measured.firstOrNull { it.el.type == ElementType.QRCODE }
-        // 信息带里文字的左边界：跟随标题元素自己声明的 x（胶片黑是 72），
-        // 二维码在左时再让开它的宽度 + 间距 —— 否则文字会贴着画布左边缘，与正文不对齐
-        val songInfoGap = 32.px(scale)
-        val songInfoBandLeft = if (songInfoMode && qrMeasured != null) {
-            songInfoBandLeft(titleElement, qrMeasured, padLeft, scale, songInfoGap)
-        } else {
-            padLeft
-        }
-        val songInfoLayouts = if (songInfoMode && qrMeasured != null) {
-            val bandWidth = (outputWidth - songInfoBandLeft - padRight).coerceAtLeast(1)
-            buildSongInfoLayouts(titleElement, artistsElement, bandWidth, defaults, skin, options, data, scale)
-        } else {
-            null
-        }
-        val contentBottom = cursor + padBottom +
-            (songInfoLayouts?.let { (it.height - (qrMeasured?.height ?: 0)).coerceAtLeast(0) } ?: 0)
+        val contentBottom = cursor + padBottom
         val canvasHeight = canvasSpec.height?.px(scale)
             ?: max(canvasSpec.minHeight.px(scale), contentBottom)
 
@@ -276,8 +252,6 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         drawBackground(canvas, outputWidth, canvasHeight, skin, data, backgroundEdit, temporaries)
 
         measured.forEachIndexed { index, m ->
-            // 样式二：二维码由底部信息带统一绘制（这里跳过，避免同一个码画两遍）
-            if (songInfoMode && m.el.type == ElementType.QRCODE) return@forEachIndexed
             val baseX = resolveX(m, padLeft, padRight, outputWidth, scale)
             val baseY = resolveY(m, index, flowY, padTop, padBottom, canvasHeight, scale)
             // 通用位移：相对画布宽/高的比例，对任意元素都成立
@@ -286,29 +260,6 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             drawElement(
                 canvas, m, x, y, defaults, skin, options, data, temporaries, scale,
                 effectiveCover, outputWidth, canvasHeight,
-            )
-        }
-
-        // ---------------- 3) 歌曲信息样式二：底部一行（二维码 + 歌名/艺人） ----------------
-        if (songInfoLayouts != null && titleElement != null) {
-            drawSongInfoBand(
-                canvas = canvas,
-                skin = skin,
-                data = data,
-                options = options,
-                titleEl = titleElement,
-                artistsEl = artistsElement,
-                qrMeasured = qrMeasured,
-                layouts = songInfoLayouts,
-                bandLeft = songInfoBandLeft,
-                padLeft = padLeft,
-                padRight = padRight,
-                padBottom = padBottom,
-                canvasWidth = outputWidth,
-                canvasHeight = canvasHeight,
-                scale = scale,
-                temporaries = temporaries,
-                effectiveCover = effectiveCover,
             )
         }
 
@@ -330,6 +281,8 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
     private fun measure(
         el: SkinElement,
         edit: EditState,
+        /** 该元素在皮肤里的路径（顶层 `[i]`，组合子元素 `[i, j]`）—— 用于取它自己的用户调整。 */
+        path: List<Int>,
         contentWidth: Int,
         defaults: ElementDefaults,
         skin: LoadedSkin,
@@ -373,7 +326,8 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
 
             ElementType.SPACER -> Measured(el, edit, width, ((el.height?.px(scale) ?: 0) * factor).roundToInt(), null)
 
-            ElementType.GROUP -> measureGroup(el, edit, contentWidth, defaults, skin, options, data, scale)
+            // 组合用与文字同一套宽度规则（已扣掉自己的 x 偏移），否则整行会越过右内边距
+            ElementType.GROUP -> measureGroup(el, edit, path, width, defaults, skin, options, data, scale)
         }
     }
 
@@ -387,6 +341,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
     private fun measureGroup(
         el: SkinElement,
         edit: EditState,
+        path: List<Int>,
         contentWidth: Int,
         defaults: ElementDefaults,
         skin: LoadedSkin,
@@ -396,6 +351,13 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
     ): Measured? {
         val kids = el.children
         if (kids.isEmpty()) return null
+        // 组合里的子元素**和顶层元素一视同仁**：可以有自己的用户调整（显隐/缩放/锚点/颜色/底色…）
+        val kidEdits = kids.indices.map { i ->
+            options.elementEdits[(path + i).joinToString(".")] ?: EditState.NONE
+        }
+        // 用户显式关掉的子元素：不进布局、不占空间
+        val activeIndices = kids.indices.filter { kidEdits[it].visible }
+        if (activeIndices.isEmpty()) return null
         val gap = el.gap.px(scale)
         val n = kids.size
         val totalGap = gap * (n - 1).coerceAtLeast(0)
@@ -404,7 +366,8 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         val fixed = IntArray(n) { -1 }
         var fixedSum = 0
         var flexCount = 0
-        kids.forEachIndexed { i, child ->
+        activeIndices.forEach { i ->
+            val child = kids[i]
             val explicit = child.width?.px(scale) ?: when (child.type) {
                 ElementType.QRCODE -> child.height?.px(scale) ?: 240.px(scale)
                 ElementType.IMAGE -> child.height?.px(scale)
@@ -425,11 +388,12 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             else -> contentWidth
         }
 
-        // 2) 量子元素
-        val measuredKids = kids.mapIndexed { i, child ->
+        // 2) 量子元素（用它们自己的用户调整，缩放/显隐都生效）
+        val measuredKids = activeIndices.mapNotNull { i ->
+            val child = kids[i]
             val childWidth = if (fixed[i] > 0) fixed[i] else perFlex
-            measure(child, EditState.NONE, childWidth, defaults, skin, options, data, scale)
-        }.filterNotNull()
+            measure(child, kidEdits[i], path + i, childWidth, defaults, skin, options, data, scale)
+        }
         if (measuredKids.isEmpty()) return null
 
         // 3) 摆位
@@ -440,8 +404,14 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         when (el.orientation) {
             GroupOrientation.ROW -> {
                 val rowH = measuredKids.maxOf { it.height }
+                // 子元素可以把位置**锚定在这一行的左/右端**（皮肤声明 placement，用户可在面板里切）：
+                // 摆放顺序 = 左锚定 → 流动（弹性宽度）→ 右锚定。
+                // 弹性宽度已经由上面的 perFlex 扣掉了固定宽度项，所以整行正好等于可用宽度。
+                val leftAnchored = measuredKids.filter { it.isAnchoredTo(ElementPlacement.BOTTOM_LEFT) }
+                val rightAnchored = measuredKids.filter { it.isAnchoredTo(ElementPlacement.BOTTOM_RIGHT) }
+                val flowing = measuredKids.filter { it !in leftAnchored && it !in rightAnchored }
                 var cx = 0
-                measuredKids.forEach { k ->
+                (leftAnchored + flowing + rightAnchored).forEach { k ->
                     placed += Placed(k, cx, crossOffset(k.height, rowH, cross))
                     cx += k.width + gap
                 }
@@ -477,6 +447,15 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             innerWidth = innerW,
             innerHeight = innerH,
         )
+    }
+
+    /** 这个子元素是否锚定在行的某一端（LEFT/TOP → 左端；RIGHT/BOTTOM → 右端；其余 → 流动）。 */
+    private fun Measured.isAnchoredTo(side: ElementPlacement): Boolean = when (side) {
+        ElementPlacement.BOTTOM_LEFT -> edit.placement == ElementPlacement.BOTTOM_LEFT ||
+            edit.placement == ElementPlacement.TOP_LEFT
+        ElementPlacement.BOTTOM_RIGHT -> edit.placement == ElementPlacement.BOTTOM_RIGHT ||
+            edit.placement == ElementPlacement.TOP_RIGHT
+        else -> false
     }
 
     private fun crossOffset(size: Int, container: Int, align: HAlign): Int = when (align) {
@@ -639,8 +618,11 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
                 if (factor != 1f) canvas.scale(factor, factor)
                 m.children.forEach { child ->
                     val childM = child.measured
+                    // 子元素自己的位移（相对画布比例）；锚点位置已在 measureGroup 里算进 dx
+                    val cx = child.dx + (canvasWidth * childM.edit.offsetX).roundToInt()
+                    val cy = child.dy + (canvasHeight * childM.edit.offsetY).roundToInt()
                     drawElement(
-                        canvas, childM, child.dx, child.dy, defaults, skin, options, data,
+                        canvas, childM, cx, cy, defaults, skin, options, data,
                         temporaries, scale, effectiveCover, canvasWidth, canvasHeight,
                     )
                 }
@@ -686,103 +668,6 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             RectF(x.toFloat(), y.toFloat(), (x + m.width).toFloat(), (y + m.height).toFloat()),
             Paint(Paint.FILTER_BITMAP_FLAG)
         )
-    }
-
-    /** 样式二：信息带里文字的左边界（= 皮肤给标题声明的 x；二维码在左时再让开它的宽度与间距）。 */
-    private fun songInfoBandLeft(
-        titleEl: SkinElement,
-        qrMeasured: Measured,
-        padLeft: Int,
-        scale: Float,
-        gap: Int,
-    ): Int {
-        val inset = padLeft + if (titleEl.x.align == HAlign.LEFT) titleEl.x.offset.px(scale) else 0
-        val qrAtLeft = qrMeasured.edit.placement == ElementPlacement.BOTTOM_LEFT
-        return if (qrAtLeft) max(inset, padLeft + qrMeasured.width + gap) else inset
-    }
-
-    /** 样式二里「歌名 + 艺人」两段文本的布局结果。 */
-    private class SongInfoLayout(
-        val title: StaticLayout,
-        val artists: StaticLayout?,
-        val gap: Int,
-    ) {
-        val height: Int get() = title.height + (artists?.let { gap + it.height } ?: 0)
-    }
-
-    /** 按信息带宽度排版歌名/艺人（宽度和流式排版时不同，必须重新排一次）。 */
-    private fun buildSongInfoLayouts(
-        titleEl: SkinElement?,
-        artistsEl: SkinElement?,
-        width: Int,
-        defaults: ElementDefaults,
-        skin: LoadedSkin,
-        options: RenderOptions,
-        data: LyricShareData,
-        scale: Float,
-    ): SongInfoLayout? {
-        if (titleEl == null) return null
-        val titleText = resolveText(titleEl, data).ifBlank { return null }
-        val titleLayout = buildLayout(
-            titleText,
-            buildTextPaint(titleEl, defaults, skin, options, scale),
-            width, titleEl, defaults, scale,
-        )
-        val artistsLayout = artistsEl?.let { el ->
-            val text = resolveText(el, data)
-            if (text.isBlank()) null
-            else buildLayout(text, buildTextPaint(el, defaults, skin, options, scale), width, el, defaults, scale)
-        }
-        return SongInfoLayout(titleLayout, artistsLayout, 10.px(scale))
-    }
-
-    /**
-     * 歌曲信息样式二：画布底部一行 —— 二维码在一侧，「歌名 + 艺人」在另一侧，纵向居中。
-     * 二维码靠左（BOTTOM_LEFT）时文字在右，其余情况二维码靠右、文字在左。
-     */
-    private fun drawSongInfoBand(
-        canvas: Canvas,
-        skin: LoadedSkin,
-        data: LyricShareData,
-        options: RenderOptions,
-        titleEl: SkinElement,
-        artistsEl: SkinElement?,
-        qrMeasured: Measured?,
-        layouts: SongInfoLayout,
-        /** 文字块的左边界（已含标题声明的 x 与二维码让位）。 */
-        bandLeft: Int,
-        padLeft: Int,
-        padRight: Int,
-        padBottom: Int,
-        canvasWidth: Int,
-        canvasHeight: Int,
-        scale: Float,
-        temporaries: MutableList<Bitmap>,
-        effectiveCover: Bitmap?,
-    ) {
-        val qrW = qrMeasured?.width ?: 0
-        val qrH = qrMeasured?.height ?: 0
-        // 二维码自己的锚点（通用属性 PLACEMENT）决定它在这一行的左侧还是右侧
-        val qrAtLeft = (qrMeasured?.edit?.placement ?: ElementPlacement.SKIN) == ElementPlacement.BOTTOM_LEFT
-        val bandHeight = max(qrH, layouts.height)
-        val bandTop = canvasHeight - padBottom - bandHeight
-
-        qrMeasured?.let { qr ->
-            val qx = if (qrAtLeft) padLeft else canvasWidth - padRight - qrW
-            val qy = bandTop + (bandHeight - qrH) / 2
-            drawQr(canvas, qr, qx, qy, skin, data, options, temporaries, effectiveCover)
-        }
-
-        val textX = bandLeft
-        val textY = bandTop + (bandHeight - layouts.height) / 2
-        canvas.save()
-        canvas.translate(textX.toFloat(), textY.toFloat())
-        layouts.title.draw(canvas)
-        layouts.artists?.let {
-            canvas.translate(0f, (layouts.title.height + layouts.gap).toFloat())
-            it.draw(canvas)
-        }
-        canvas.restore()
     }
 
     /** 画圆角/圆形图片：用 BitmapShader 才能既裁剪出圆角、又保持 centerCrop/fitCenter 语义。 */

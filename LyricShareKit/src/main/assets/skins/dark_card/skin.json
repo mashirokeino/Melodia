@@ -71,9 +71,6 @@
           }
         ]
       }
-    },
-    "songInfo": {
-      "mode": "above"
     }
   },
   "defaults": {
@@ -221,7 +218,7 @@
             "label": "放置位置",
             "options": [
               "left",
-              "center",
+              "bottom",
               "right"
             ]
           },

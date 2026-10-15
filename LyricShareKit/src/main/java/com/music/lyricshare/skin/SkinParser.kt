@@ -47,7 +47,6 @@ object SkinParser {
             minHeight = jo.optInt("minHeight", 0),
             padding = parseInsets(jo.optJSONObject("padding")) ?: Insets(72, 96, 72, 96),
             background = parseBackground(jo.optJSONObject("background")),
-            songInfo = parseSongInfo(jo.opt("songInfo")),
         )
     }
 
@@ -219,14 +218,6 @@ object SkinParser {
      * 「用户可编辑」声明。
      * `"editable": true` 简写 = 全开；对象 = 逐项开关；不写 / false = 不可编辑（界面上不出现入口）。
      */
-    /** `"songInfo": "besideQr"` 或 `{"mode": "besideQr"}` 两种写法都支持。 */
-    private fun parseSongInfo(node: Any?): SongInfoSpec = when (node) {
-        null -> SongInfoSpec()
-        is String -> SongInfoSpec(SongInfoMode.from(node))
-        is JSONObject -> SongInfoSpec(SongInfoMode.from(node.optString("mode")))
-        else -> SongInfoSpec()
-    }
-
     private fun parseEditable(node: Any?): EditableSpec? = when (node) {
         null -> null
         is Boolean -> if (node) EditableSpec.ALL else null

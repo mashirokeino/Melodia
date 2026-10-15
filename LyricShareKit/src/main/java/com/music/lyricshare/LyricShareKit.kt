@@ -225,10 +225,10 @@ object LyricShareKit {
         fontOverride: FontSpec? = null,
         showQrCode: Boolean = true,
         /**
-         * 元素序号 → 用户调整（换图 / 形状 / 大小 / 位移 / 锚点 / 颜色 / 底色 / 显隐）。
-         * 序号 = 皮肤 `elements` 的下标，语义与页面上的编辑面板一致。
+         * 元素**路径** → 用户调整（换图 / 形状 / 大小 / 位移 / 锚点 / 颜色 / 底色 / 显隐）。
+         * 键 = 元素路径（顶层 "3"，组合子元素 "3.1"），与页面上的编辑面板一致。
          */
-        elementEdits: Map<Int, EditState> = emptyMap(),
+        elementEdits: Map<String, EditState> = emptyMap(),
         /** 画布背景的用户调整（换图 / 纯色 / 缩放 / 平移 / 显隐）。 */
         backgroundEdit: EditState = EditState(),
         /** 文本默认样式的用户调整（字体 / 颜色）。 */
@@ -241,7 +241,7 @@ object LyricShareKit {
             ?: error("没有任何可用皮肤")
         // 封面源图：序号最小的封面位元素若被换过图，就用它作为"当前封面"
         val coverSlotIndex = skin.spec.elements.indexOfFirst { it.isCoverSlot }
-        val coverOverride = if (coverSlotIndex >= 0) elementEdits[coverSlotIndex]?.bitmap else null
+        val coverOverride = if (coverSlotIndex >= 0) elementEdits[coverSlotIndex.toString()]?.bitmap else null
         val coverBitmap = resolveCover(context, request, coverOverride ?: cover)
         renderer(context).render(
             skin = skin,

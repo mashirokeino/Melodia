@@ -412,26 +412,6 @@ data class SkinElement(
     val isCoverSlot: Boolean get() = type == ElementType.IMAGE && (useCover || role.equals("cover", ignoreCase = true))
 }
 
-/**
- * 歌曲信息（歌名 / 艺人）的版式 —— 由皮肤包决定。
- *  · [ABOVE]：在歌词上方（样式一，默认）
- *  · [BESIDE_QR]：挪到底部与二维码并排（样式二）
- * 元素用 `role:"title"` / `role:"artists"` 标注。
- */
-enum class SongInfoMode {
-    ABOVE, BESIDE_QR;
-
-    companion object {
-        fun from(raw: String?): SongInfoMode = when (raw?.trim()?.lowercase()) {
-            "besideqr", "beside_qr", "beside", "bottom" -> BESIDE_QR
-            else -> ABOVE
-        }
-    }
-}
-
-/** 歌曲信息版式声明。 */
-data class SongInfoSpec(val mode: SongInfoMode = SongInfoMode.ABOVE)
-
 /** 画布：参考宽度 + 高度策略（null = 按内容自适应）+ 内边距 + 背景。 */
 data class CanvasSpec(
     val width: Int = 1080,
@@ -440,8 +420,6 @@ data class CanvasSpec(
     val minHeight: Int = 0,
     val padding: Insets = Insets(72, 96, 72, 96),
     val background: BackgroundSpec = BackgroundSpec(),
-    /** 歌名/艺人的版式（样式一 = 歌词上方；样式二 = 底部与二维码并排）。 */
-    val songInfo: SongInfoSpec = SongInfoSpec(),
 )
 
 /** 背景描述：纯色 / 线性渐变 / 图片（可用运行时封面、可模糊、可叠压暗层）。 */
@@ -477,8 +455,14 @@ data class ElementDefaults(
 
 /** 一处可编辑项挂在皮肤的哪个部位 —— 决定引擎如何应用用户的调整。 */
 sealed interface EditableOwner {
-    /** 某个绘制元素（按索引）。 */
-    data class Element(val index: Int, val element: SkinElement) : EditableOwner
+    /**
+     * 某个绘制元素，用**路径**寻址：顶层是 `[i]`，组合子元素是 `[i, j]`、`[i, j, k]`…
+     * 这样组合里的子元素（如"二维码旁那行"里的二维码）也能有自己的可编辑项。
+     */
+    data class Element(val path: List<Int>, val element: SkinElement) : EditableOwner {
+        /** 与渲染器对齐的键，如 "3" / "3.1"。 */
+        val key: String get() = path.joinToString(".")
+    }
 
     /** 画布背景。 */
     data object Background : EditableOwner
@@ -505,16 +489,24 @@ val SkinSpec.editables: List<SkinEditable>
     get() {
         val list = ArrayList<Pair<Int, SkinEditable>>()
         var seq = 0
-        elements.forEachIndexed { index, el ->
-            el.editable?.let { spec ->
-                list += (spec.order ?: (1000 + seq++)) to SkinEditable(
-                    id = spec.id ?: "el_$index",
-                    label = spec.label ?: defaultLabel(el),
-                    spec = spec,
-                    owner = EditableOwner.Element(index, el),
-                )
+
+        // 递归：顶层元素与组合子元素一视同仁 —— 谁能被编辑，看它自己有没有声明 editable
+        fun walk(elements: List<SkinElement>, prefix: List<Int>) {
+            elements.forEachIndexed { index, el ->
+                val path = prefix + index
+                el.editable?.let { spec ->
+                    list += (spec.order ?: (1000 + seq++)) to SkinEditable(
+                        id = spec.id ?: ("el_" + path.joinToString("_")),
+                        label = spec.label ?: defaultLabel(el),
+                        spec = spec,
+                        owner = EditableOwner.Element(path, el),
+                    )
+                }
+                if (el.children.isNotEmpty()) walk(el.children, path)
             }
         }
+        walk(elements, emptyList())
+
         canvas.background.editable?.let { spec ->
             list += (spec.order ?: (1000 + seq++)) to SkinEditable(
                 id = spec.id ?: "background",
