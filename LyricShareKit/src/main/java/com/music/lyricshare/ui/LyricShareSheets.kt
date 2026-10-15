@@ -36,10 +36,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +52,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import com.music.lyricshare.R
 import androidx.compose.ui.text.font.FontWeight
@@ -470,10 +476,13 @@ private fun SliderRow(
     onValueChange: (Float) -> Unit,
 ) {
     val tokens = LocalLyricShareTokens.current
+    val haptics = LocalHapticFeedback.current
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
     // 1% 一档；上限 400 档是防止极端区间让 Slider 画满刻度
     val stepCount = (span / SLIDER_STEP).roundToInt().coerceIn(1, 400)
     val snapped = snapToStep(value, range.start, span, stepCount)
+    // 记录"上一格"，每跨过一格震一下（同一格内连续拖动不重复震）
+    var lastTick by remember { mutableStateOf(snapped) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = tokens.onSurface, fontSize = tokens.textBody, modifier = Modifier.weight(1f))
@@ -481,9 +490,22 @@ private fun SliderRow(
         }
         Slider(
             value = snapped,
-            onValueChange = { raw -> onValueChange(snapToStep(raw, range.start, span, stepCount)) },
+            onValueChange = { raw ->
+                val next = snapToStep(raw, range.start, span, stepCount)
+                if (next != lastTick) {
+                    lastTick = next
+                    // 一格一震：用系统触觉反馈（无需 VIBRATE 权限）
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+                onValueChange(next)
+            },
             valueRange = range,
             steps = (stepCount - 1).coerceAtLeast(0),
+            // 档位点画成透明：几十上百个点太密，影响观感（吸附与步进照旧）
+            colors = SliderDefaults.colors(
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
         )
     }
 }
