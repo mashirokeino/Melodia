@@ -385,7 +385,7 @@ fun LyricShareImageScreen(
             skins.associate { skin ->
                 // 单个皮肤渲染失败不影响其它皮肤；但协程取消必须抛出，否则会留下"半套缩略图"
                 skin.id to runCatchingNoCancel { renderer.render(skin, data, optionsFor(THUMB_WIDTH)) }.getOrNull()
-            }.filterValues { it != null }.mapValues { it.value!! }
+            }.mapNotNull { (id, bitmap) -> bitmap?.let { id to it } }.toMap()
         }
         skinPreviews = thumbs
     }
@@ -579,6 +579,9 @@ fun LyricShareImageScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (LyricShareKit.removeSkin(context, target.id)) {
+                        // 内存里那一份也要丢掉：否则切走后 DisposableEffect 的兜底落盘
+                        // 会把刚删掉的配置（含图片）重新写回磁盘
+                        adjustmentsBySkin.remove(target.id)
                         skins = LyricShareKit.skins(context)
                         if (selectedSkinId == target.id) selectedSkinId = skins.firstOrNull()?.id
                         toast(context, "已删除皮肤：${target.name}")

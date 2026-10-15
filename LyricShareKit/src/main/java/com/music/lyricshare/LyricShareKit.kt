@@ -126,15 +126,17 @@ object LyricShareKit {
         synchronized(lock) {
             val app = context.applicationContext
             appContext = app
-            if (fontProviderRef == null) {
-                fontProviderRef = FontProvider(app).also { provider ->
-                    LyricShareConfig.defaultFont?.let { spec ->
-                        runCatching { provider.defaultTypeface = provider.resolve(spec, null) }
-                    }
+            val provider = fontProviderRef ?: FontProvider(app).also { created ->
+                LyricShareConfig.defaultFont?.let { spec ->
+                    runCatching { created.defaultTypeface = created.resolve(spec, null) }
                 }
+                fontProviderRef = created
             }
             if (skinRepositoryRef == null) skinRepositoryRef = SkinRepository(app)
-            if (rendererRef == null) rendererRef = LyricImageRenderer(requireNotNull(fontProviderRef))
+            if (rendererRef == null) rendererRef = LyricImageRenderer(provider)
+            // ⚠️ 新增内部组件时**务必**在这里也建一份：访问器虽然会兜底创建，
+            //    但漏在这里意味着每个入口都要多走一次兜底分支（且容易忘）。
+            if (editStateStoreRef == null) editStateStoreRef = EditStateStore(app)
         }
     }
 
@@ -175,17 +177,24 @@ object LyricShareKit {
      */
     fun editStateStore(context: Context): EditStateStore {
         install(context)
-        return requireNotNull(editStateStoreRef)
+        // 兜底：万一某条路径没走到 install 的赋值，也绝不把 null 抛给界面（进页面崩溃是最糟的失败方式）
+        return editStateStoreRef ?: synchronized(lock) {
+            editStateStoreRef ?: EditStateStore(requireApp(context)).also { editStateStoreRef = it }
+        }
     }
 
     fun fontProvider(context: Context): FontProvider {
         install(context)
-        return requireNotNull(fontProviderRef)
+        return fontProviderRef ?: synchronized(lock) {
+            fontProviderRef ?: FontProvider(requireApp(context)).also { fontProviderRef = it }
+        }
     }
 
     fun renderer(context: Context): LyricImageRenderer {
         install(context)
-        return requireNotNull(rendererRef)
+        return rendererRef ?: synchronized(lock) {
+            rendererRef ?: LyricImageRenderer(fontProvider(context)).also { rendererRef = it }
+        }
     }
 
     // ------------------------------------------------------------ 拉起页面
@@ -226,7 +235,7 @@ object LyricShareKit {
         textEdit: EditState = EditState(),
     ): Bitmap = withContext(Dispatchers.Default) {
         install(context)
-        val repository = requireNotNull(skinRepositoryRef)
+        val repository = skinRepositoryRef ?: SkinRepository(requireApp(context))
         val skin = repository.find(skinId ?: request.defaultSkinId)
             ?: repository.loadAll().firstOrNull()
             ?: error("没有任何可用皮肤")
