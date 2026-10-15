@@ -172,45 +172,6 @@
       "crossAlign": "center",
       "x": 72,
       "marginTop": 72,
-      "editable": {
-        "id": "songinfo",
-        "order": 4,
-        "label": "歌曲信息",
-        "controls": [
-          {
-            "property": "visible",
-            "control": "switch",
-            "label": "显示歌曲信息"
-          },
-          {
-            "property": "scale",
-            "control": "slider",
-            "label": "大小",
-            "range": [
-              0.6,
-              1.4
-            ]
-          },
-          {
-            "property": "offset_x",
-            "control": "slider",
-            "label": "水平位置",
-            "range": [
-              -0.25,
-              0.25
-            ]
-          },
-          {
-            "property": "offset_y",
-            "control": "slider",
-            "label": "垂直位置",
-            "range": [
-              -0.25,
-              0.25
-            ]
-          }
-        ]
-      },
       "children": [
         {
           "type": "group",
@@ -224,7 +185,25 @@
               "text": "{title}",
               "size": 36,
               "color": "#FFFFFF",
-              "lineSpacing": 6
+              "lineSpacing": 6,
+              "editable": {
+                "id": "title",
+                "order": 6,
+                "label": "歌名",
+                "controls": [
+                  {
+                    "property": "text",
+                    "control": "text",
+                    "label": "歌名",
+                    "hint": "可用 {title} {artists}；日期 YYYY/MM/dd HH:mm:ss"
+                  },
+                  {
+                    "property": "color",
+                    "control": "color",
+                    "label": "字色"
+                  }
+                ]
+              }
             },
             {
               "type": "text",
@@ -248,7 +227,7 @@
           },
           "editable": {
             "id": "qr",
-            "order": 5,
+            "order": 4,
             "label": "二维码",
             "controls": [
               {
@@ -259,10 +238,37 @@
               {
                 "property": "placement",
                 "control": "enum",
-                "label": "放置位置",
+                "label": "靠边",
                 "options": [
                   "left",
                   "right"
+                ]
+              },
+              {
+                "property": "offset_x",
+                "control": "slider",
+                "label": "水平位置",
+                "range": [
+                  -0.3,
+                  0.3
+                ]
+              },
+              {
+                "property": "offset_y",
+                "control": "slider",
+                "label": "垂直位置",
+                "range": [
+                  -0.3,
+                  0.3
+                ]
+              },
+              {
+                "property": "scale",
+                "control": "slider",
+                "label": "大小",
+                "range": [
+                  0.5,
+                  2.0
                 ]
               },
               {
@@ -275,15 +281,6 @@
                 "control": "color",
                 "label": "底色",
                 "allowTransparent": true
-              },
-              {
-                "property": "scale",
-                "control": "slider",
-                "label": "大小",
-                "range": [
-                  0.5,
-                  2.0
-                ]
               }
             ]
           }

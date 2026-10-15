@@ -56,6 +56,9 @@ class EditStateStore(context: Context) {
 
     /** 写入某套皮肤的全部用户调整（含把用户选的图片落盘 / 清理已重置的图片）。 */
     fun save(skinId: String, edits: Map<String, EditState>) {
+        // 没有任何调整、磁盘上也没存过 → 不凭空建一条空配置
+        // （皮肤刚被删掉时，页面切走的兜底落盘会走到这里）
+        if (edits.isEmpty() && !prefs.contains(key(skinId))) return
         val root = JSONObject()
         edits.forEach { (editId, state) ->
             root.put(editId, encode(state, skinId, editId))
@@ -79,6 +82,7 @@ class EditStateStore(context: Context) {
         jo.put("visible", state.visible)
         state.solidColor?.let { jo.put("solidColor", it) }
         state.color?.let { jo.put("color", it) }
+        state.text?.let { jo.put("text", it) }
         jo.put("shape", state.shape.name)
         jo.put("scale", state.scale.toDouble())
         jo.put("offsetX", state.offsetX.toDouble())
@@ -135,6 +139,7 @@ class EditStateStore(context: Context) {
             offsetX = jo.optDouble("offsetX", 0.0).toFloat(),
             offsetY = jo.optDouble("offsetY", 0.0).toFloat(),
             color = jo.optIntOrNull("color"),
+            text = jo.optStringOrNull("text"),
             font = font,
             placement = runCatching { ElementPlacement.valueOf(jo.optString("placement")) }
                 .getOrDefault(ElementPlacement.SKIN),

@@ -70,13 +70,18 @@ data class EditState(
     val color: Int? = null,
     /** 字体（文本类）。null = 皮肤声明。 */
     val font: FontSpec? = null,
+    /**
+     * 用户输入的**文字**（文本框控件）。
+     * null = 用皮肤声明的 text；写进去的字符串仍支持占位符与日期时间参数。
+     */
+    val text: String? = null,
     /** 二维码放置位置（仅二维码）。 */
     val placement: QrPlacement = QrPlacement.SKIN,
 ) {
     val isDefault: Boolean
         get() = bitmap == null && solidColor == null && color == null && font == null &&
-            visible && shape == ImageShape.DEFAULT && scale == 1f && offsetX == 0f && offsetY == 0f &&
-            placement == QrPlacement.SKIN
+            text == null && visible && shape == ImageShape.DEFAULT && scale == 1f &&
+            offsetX == 0f && offsetY == 0f && placement == QrPlacement.SKIN
 
     companion object {
         val NONE = EditState()
@@ -297,7 +302,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         val factor = edit.scale.coerceIn(0.05f, 6f)
         return when (el.type) {
             ElementType.TEXT, ElementType.LYRIC -> {
-                val text = resolveText(el, data)
+                val text = resolveText(el, data, edit)
                 if (text.isBlank()) return null                       // 空文本 = 这个元素不存在（不预留）
                 val paint = buildTextPaint(el, defaults, skin, options, scale, edit)
                 val layout = buildLayout(text, paint, width, el, defaults, scale)
@@ -410,12 +415,26 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
                 val leftAnchored = measuredKids.filter { it.isAnchoredTo(ElementPlacement.BOTTOM_LEFT) }
                 val rightAnchored = measuredKids.filter { it.isAnchoredTo(ElementPlacement.BOTTOM_RIGHT) }
                 val flowing = measuredKids.filter { it !in leftAnchored && it !in rightAnchored }
+                // 行宽：取"声明宽度"与"内容宽度"的较大者
+                val contentW = measuredKids.sumOf { it.width } + gap * (measuredKids.size - 1).coerceAtLeast(0)
+                val rowWidth = max(el.width?.px(scale) ?: 0, contentW)
                 var cx = 0
-                (leftAnchored + flowing + rightAnchored).forEach { k ->
+                leftAnchored.forEach { k ->
                     placed += Placed(k, cx, crossOffset(k.height, rowH, cross))
                     cx += k.width + gap
                 }
-                innerW = (cx - gap).coerceAtLeast(1)
+                flowing.forEach { k ->
+                    placed += Placed(k, cx, crossOffset(k.height, rowH, cross))
+                    cx += k.width + gap
+                }
+                // 右锚定：**从行尾倒着排** —— 不管文字块多大，它都贴着这一行的右端（与画布边缘对齐）
+                val rightTotal = rightAnchored.sumOf { it.width } + gap * (rightAnchored.size - 1).coerceAtLeast(0)
+                var rx = (rowWidth - rightTotal).coerceAtLeast(cx)
+                rightAnchored.forEach { k ->
+                    placed += Placed(k, rx, crossOffset(k.height, rowH, cross))
+                    rx += k.width + gap
+                }
+                innerW = rowWidth.coerceAtLeast(cx - gap).coerceAtLeast(1)
                 innerH = rowH
             }
             GroupOrientation.COLUMN -> {
@@ -869,12 +888,30 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
     }
 
     /** 展开文本占位符；LYRIC 元素没写 text 时直接用选中的歌词行。 */
-    private fun resolveText(el: SkinElement, data: LyricShareData): String {
-        val template = el.text
-        if (template == null) {
-            return if (el.type == ElementType.LYRIC) data.lyricLines.joinToString("\n") else ""
-        }
-        return template
+    /**
+     * 展开元素的文字。
+     *
+     * 文本来源：**用户用文本框输入的内容** > 皮肤声明的 `text`（LYRIC 没写 text 时用歌词行）。
+     *
+     * 支持的参数：
+     *  · `{title}` `{artists}` `{album}` `{lines}` `{firstLine}` `{count}` `{brand}`
+     *  · **日期时间**：`YYYY` 年、`YY` 两位年、`MM` 月、`dd` 日、`HH` 24 小时、`hh` 12 小时、`mm` 分、`ss` 秒
+     *    （`{YYYY}` 与裸写 `YYYY` 都认；裸写只在"独立成词"时替换，不会把正文里的单词改坏）
+     *  · `{date}` = `YYYY/MM/dd`、`{time}` = `HH:mm:ss`
+     *
+     * 时间取 [LyricShareData.timestampMillis]（数据构造时固定一次），
+     * 所以预览与导出用的是**同一个时刻**，不会出现两秒之差。
+     */
+    private fun resolveText(el: SkinElement, data: LyricShareData, edit: EditState = EditState.NONE): String {
+        val userText = edit.text
+        val template: String = when {
+            userText != null -> userText
+            el.text != null -> el.text
+            el.type == ElementType.LYRIC -> data.lyricLines.joinToString("\n")
+            else -> null
+        } ?: return ""
+
+        var out = template
             .replace("{title}", data.title)
             .replace("{artists}", data.artists)
             .replace("{album}", data.album.orEmpty())
@@ -882,5 +919,31 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             .replace("{firstLine}", data.lyricLines.firstOrNull().orEmpty())
             .replace("{count}", data.lyricLines.size.toString())
             .replace("{brand}", data.brandText.orEmpty())
+
+        // 日期时间：先替换带花括号的写法，再替换"独立成词"的裸写法
+        val date = java.util.Date(data.timestampMillis)
+        val format = java.text.SimpleDateFormat("", java.util.Locale.getDefault())
+        DATE_TIME_TOKENS.forEach { (token, pattern) ->
+            // applyPattern 返回 void，得先设模式再取值
+            format.applyPattern(pattern)
+            val value = format.format(date)
+            out = out.replace("{$token}", value)
+            out = Regex("(?<![A-Za-z0-9])" + Regex.escape(token) + "(?![A-Za-z0-9])").replace(out, value)
+        }
+        format.applyPattern("yyyy/MM/dd")
+        out = out.replace("{date}", format.format(date))
+        format.applyPattern("HH:mm:ss")
+        out = out.replace("{time}", format.format(date))
+        return out
     }
+
 }
+
+/**
+ * 日期时间参数 → SimpleDateFormat 模式。
+ * 顺序有意义：`YYYY` 必须排在 `YY` 之前，否则 YYYY 会被先拆成 YY+YY。
+ */
+private val DATE_TIME_TOKENS = listOf(
+    "YYYY" to "yyyy", "YY" to "yy", "MM" to "MM", "dd" to "dd",
+    "HH" to "HH", "hh" to "hh", "mm" to "mm", "ss" to "ss",
+)

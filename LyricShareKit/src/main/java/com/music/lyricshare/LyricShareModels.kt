@@ -113,6 +113,11 @@ data class LyricShareData(
     val cover: Bitmap? = null,
     val qrContent: String? = null,
     val brandText: String? = null,
+    /**
+     * 数据构造时固定下来的时间戳：文字里的 `YYYY/MM/dd/HH/hh/mm/ss` 等参数由它生成，
+     * 保证预览与导出、以及同一次出图里的多处时间参数完全一致。
+     */
+    val timestampMillis: Long = System.currentTimeMillis(),
 ) {
     companion object {
         fun from(request: LyricShareRequest, cover: Bitmap? = null) = LyricShareData(

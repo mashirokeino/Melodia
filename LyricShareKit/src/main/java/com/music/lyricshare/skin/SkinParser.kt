@@ -218,33 +218,21 @@ object SkinParser {
      * 「用户可编辑」声明。
      * `"editable": true` 简写 = 全开；对象 = 逐项开关；不写 / false = 不可编辑（界面上不出现入口）。
      */
-    private fun parseEditable(node: Any?): EditableSpec? = when (node) {
-        null -> null
-        is Boolean -> if (node) EditableSpec.ALL else null
-        is JSONObject -> {
-            if (!node.optBoolean("enabled", true)) {
-                null
-            } else {
-                EditableSpec(
-                    id = node.optStringOrNull("id"),
-                    order = node.optIntOrNull("order"),
-                    label = node.optStringOrNull("label"),
-                    replace = node.optBoolean("replace", true),
-                    visibility = node.optBoolean("visibility", true),
-                    shape = node.optBoolean("shape", true),
-                    shapes = parseShapes(node.optJSONArray("shapes")),
-                    size = node.optBoolean("size", true),
-                    sizeRange = parseFloatRange(node.optJSONArray("sizeRange"), EditableSpec.ALL.sizeRange, positiveOnly = true),
-                    move = node.optBoolean("move", true),
-                    moveRange = node.optDouble("moveRange", 0.25).toFloat().coerceIn(0f, 0.5f),
-                    color = node.optBoolean("color", false),
-                    background = node.optBoolean("background", false),
-                    font = node.optBoolean("font", false),
-                    controls = parseControls(node.optJSONArray("controls")),
-                )
-            }
-        }
-        else -> null
+    /**
+     * `editable` 只接受对象形式：`{ "id": …, "order": …, "label": …, "controls": [ … ] }`。
+     * 不再支持旧式的开关写法与 `true` 简写（没有旧皮肤要兼容）。
+     */
+    private fun parseEditable(node: Any?): EditableSpec? {
+        val jo = node as? JSONObject ?: return null
+        if (!jo.optBoolean("enabled", true)) return null
+        val controls = parseControls(jo.optJSONArray("controls"))
+        if (controls.isEmpty()) return null
+        return EditableSpec(
+            id = jo.optStringOrNull("id"),
+            order = jo.optIntOrNull("order"),
+            label = jo.optStringOrNull("label"),
+            controls = controls,
+        )
     }
 
     /** 控件表：一条 = 一个可调属性 + 用哪种控件（皮肤完全自由地决定给用户开放什么）。 */
@@ -258,6 +246,8 @@ object SkinParser {
                 kind = ControlKind.from(jo.optString("control")) ?: ControlKind.forProperty(property),
                 label = jo.optStringOrNull("label"),
                 range = parseFloatRange(jo.optJSONArray("range"), emptyList()),
+                step = jo.optDoubleOrNull("step")?.toFloat()?.takeIf { it >= 0f },
+                hint = jo.optStringOrNull("hint"),
                 options = (jo.optJSONArray("options")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()),
                 allowTransparent = jo.optBoolean("allowTransparent", false),
                 allowNone = jo.optBoolean("allowNone", true),
@@ -265,24 +255,6 @@ object SkinParser {
         }
     }
 
-    private fun parseShapes(arr: JSONArray?): List<ImageShape> {
-        if (arr == null) return EditableSpec.ALL.shapes
-        val shapes = (0 until arr.length())
-            .map { ImageShape.from(arr.optString(it)) }
-            .filter { it != ImageShape.DEFAULT }
-            .distinct()
-        return shapes.ifEmpty { EditableSpec.ALL.shapes }
-    }
-
-    /**
-     * 解析 `[下界, 上界]`。
-     *
-     * **必须允许负的下界**：位置偏移是**正负可调**的（如 `[-0.25, 0.25]` = 左右各挪 1/4 画布）。
-     * 早先这里要求 `lo > 0`，把偏移区间整个丢掉、回落到默认区间，导致滑杆圆点在 0% 时贴左端
-     * 且拖动会给出 60%~140% 的错误偏移。
-     *
-     * @param positiveOnly 仅供"尺寸倍数"这类**必须为正**的区间用（下界会被抬到 0.01）。
-     */
     private fun parseFloatRange(
         arr: JSONArray?,
         fallback: List<Float>,

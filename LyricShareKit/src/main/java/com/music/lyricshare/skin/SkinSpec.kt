@@ -222,7 +222,10 @@ enum class EditProperty {
     /** 元素背后的底色（二维码静默区、文字高亮底、图片底板），可设为透明。 */
     BACKGROUND,
     /** 字体（文本类）。 */
-    FONT;
+    FONT,
+
+    /** 文本框：用户可以**在声明的位置输入文字**（支持占位符与日期时间参数）。 */
+    TEXT;
 
     companion object {
         fun from(raw: String?): EditProperty? = when (raw?.trim()?.lowercase()?.replace("-", "_")) {
@@ -236,6 +239,7 @@ enum class EditProperty {
             "color", "tint" -> COLOR
             "background", "bg", "solid" -> BACKGROUND
             "font", "typeface" -> FONT
+            "text", "input", "string", "content" -> TEXT
             else -> null
         }
     }
@@ -243,7 +247,10 @@ enum class EditProperty {
 
 /** 界面用哪种控件来编辑某个属性。 */
 enum class ControlKind {
-    SWITCH, SLIDER, COLOR, ENUM, FONT, IMAGE, SHAPE;
+    SWITCH, SLIDER, COLOR, ENUM, FONT, IMAGE, SHAPE,
+
+    /** 文本框：可输入文字（含占位符 / 日期时间参数）。 */
+    TEXT;
 
     companion object {
         fun from(raw: String?): ControlKind? = when (raw?.trim()?.lowercase()) {
@@ -254,6 +261,7 @@ enum class ControlKind {
             "font", "fonts" -> FONT
             "image", "photo", "album" -> IMAGE
             "shape", "corner" -> SHAPE
+            "text", "input", "string", "field" -> TEXT
             else -> null
         }
 
@@ -266,6 +274,7 @@ enum class ControlKind {
             EditProperty.PLACEMENT -> ENUM
             EditProperty.COLOR, EditProperty.BACKGROUND -> COLOR
             EditProperty.FONT -> FONT
+            EditProperty.TEXT -> TEXT
         }
     }
 }
@@ -281,6 +290,13 @@ data class ControlSpec(
     val label: String? = null,
     /** SLIDER 的范围。 */
     val range: List<Float> = emptyList(),
+    /**
+     * SLIDER 的**颗粒度**（每一格的值）。不写按 1% 走；写 0 = 连续（不吸附）。
+     * 范围与颗粒度都由皮肤声明，引擎不预设。
+     */
+    val step: Float? = null,
+    /** TEXT 的输入提示（写清楚这个位置能填什么，例如可用参数）。 */
+    val hint: String? = null,
     /** ENUM 的可选项（`left` / `center` / `right` / `top` / `bottom` / `skin`…）。 */
     val options: List<String> = emptyList(),
     /** COLOR：是否给一个"透明"档。 */
@@ -296,45 +312,15 @@ data class EditableSpec(
     val order: Int? = null,
     /** 界面上显示的名字，如 "封面" / "背景"。 */
     val label: String? = null,
-    /** 允许换图（系统图片选择器）。 */
-    val replace: Boolean = true,
-    /** 允许显示/隐藏 —— "是否添加封面"就是这个开关。 */
-    val visibility: Boolean = true,
-    /** 允许改形状（仅图片元素；背景恒为铺满，忽略此项）。 */
-    val shape: Boolean = true,
-    /** 形状可选项，默认三种全给。 */
-    val shapes: List<ImageShape> = listOf(ImageShape.ROUNDED, ImageShape.CIRCLE, ImageShape.RECT),
-    /** 允许改大小：图片元素 = 改变占位尺寸（文字会跟着重排）；背景 = 缩放画面。 */
-    val size: Boolean = true,
-    /** 缩放范围（相对皮肤声明值）。 */
-    val sizeRange: List<Float> = listOf(0.6f, 1.4f),
-    /** 允许调位置。 */
-    val move: Boolean = true,
-    /** 位置偏移上限，相对参考画布宽/高的比例（0.25 = 最多挪 1/4 画布）。 */
-    val moveRange: Float = 0.25f,
-    /** 允许改颜色：文本=字体颜色；二维码=码点前景色。 */
-    val color: Boolean = false,
-    /** 允许改底色：目前用于二维码（含"透明底"）。 */
-    val background: Boolean = false,
-    /** 允许改字体（仅文本）。 */
-    val font: Boolean = false,
     /**
-     * 控件表：**新的、完全数据驱动**的写法。写了它就以它为准；
-     * 不写则把上面的开关按元素类型的能力表展开（兼容旧皮肤）。
+     * **控件表**：皮肤自己决定给用户开放哪些属性、用什么控件、范围/颗粒度/选项多少。
+     * 界面按这张表逐条渲染控件（`switch/slider/color/enum/font/image/shape/text`）。
+     * 空 = 这一项没有任何可调内容（入口点了也没东西，建议别声明）。
      */
     val controls: List<ControlSpec> = emptyList(),
 ) {
-    /**
-     * 展开成控件表：优先用手写的 [controls]；否则按 [type] 的能力表把旧式开关展开。
-     * 这样旧皮肤不用改也能用，新皮肤可以精确控制"开哪些项、用什么控件、范围多少"。
-     */
-    fun controlsFor(type: ElementType): List<ControlSpec> =
-        controls.ifEmpty { ElementCapabilities.expandLegacy(this, type) }
-
-    companion object {
-        /** 全开的默认声明（`"editable": true`）。 */
-        val ALL = EditableSpec()
-    }
+    /** 界面用这份控件表；没有类型判断、也没有"旧式开关"兼容层。 */
+    fun controlsFor(@Suppress("UNUSED_PARAMETER") type: ElementType): List<ControlSpec> = controls
 }
 
 /**
@@ -571,9 +557,8 @@ class LoadedSkin(
  *  这里回答的是**引擎问题**：这一类元素在绘制上支持哪些可调属性。
  *  （例如"图片能着色、能换源、能裁形状"，而"文本能换字体，图片不能"。）
  *
- *  它**不参与界面逻辑**：界面只认皮肤声明的控件表（[EditableSpec.controlsFor]）；
- *  注册表只用来把旧式开关（`replace/visibility/size/move/...`）和 `"editable": true`
- *  展开成控件表，以及校验皮肤有没有声明引擎做不到的属性。
+ *  它**不参与界面逻辑**：界面只认皮肤声明的控件表（[EditableSpec.controls]），
+ *  注册表只用于 `ControlSpec` 未写 `control`/`range` 时给默认值，以及提示皮肤作者哪些属性有意义。
  */
 object ElementCapabilities {
 
@@ -585,8 +570,8 @@ object ElementCapabilities {
             EditProperty.COLOR, EditProperty.BACKGROUND,
         )
         ElementType.TEXT, ElementType.LYRIC -> listOf(
-            EditProperty.VISIBLE, EditProperty.SCALE, EditProperty.OFFSET_X, EditProperty.OFFSET_Y,
-            EditProperty.COLOR, EditProperty.BACKGROUND, EditProperty.FONT,
+            EditProperty.TEXT, EditProperty.VISIBLE, EditProperty.SCALE, EditProperty.OFFSET_X,
+            EditProperty.OFFSET_Y, EditProperty.COLOR, EditProperty.BACKGROUND, EditProperty.FONT,
         )
         ElementType.QRCODE -> listOf(
             EditProperty.VISIBLE, EditProperty.PLACEMENT, EditProperty.SCALE,
@@ -620,6 +605,11 @@ object ElementCapabilities {
         EditProperty.COLOR -> ControlSpec(property, label = "颜色")
         EditProperty.BACKGROUND -> ControlSpec(property, label = "底色", allowTransparent = true)
         EditProperty.FONT -> ControlSpec(property, label = "字体")
+        EditProperty.TEXT -> ControlSpec(
+            property,
+            label = "文字",
+            hint = "可用：{title} {artists} {album} {lines} ｜ 日期时间 YYYY MM dd HH hh mm ss",
+        )
     }
 
     private fun defaultRange(type: ElementType, property: EditProperty): List<Float> = when (type) {
@@ -627,32 +617,5 @@ object ElementCapabilities {
         ElementType.GROUP -> listOf(0.5f, 2f)
         ElementType.TEXT, ElementType.LYRIC -> listOf(0.6f, 1.6f)
         else -> listOf(0.6f, 1.4f)
-    }
-
-    /**
-     * 把旧式开关（`replace / visibility / shape / size / move / color / background / font`）
-     * 按元素类型的能力表展开成控件表 —— 老皮肤不用改也能跑。
-     */
-    fun expandLegacy(spec: EditableSpec, type: ElementType): List<ControlSpec> = buildList {
-        if (spec.replace && supports(type, EditProperty.SOURCE)) add(defaultControl(type, EditProperty.SOURCE))
-        if (spec.visibility) add(defaultControl(type, EditProperty.VISIBLE))
-        if (spec.background && supports(type, EditProperty.BACKGROUND)) {
-            add(defaultControl(type, EditProperty.BACKGROUND))
-        }
-        if (spec.color && supports(type, EditProperty.COLOR)) add(defaultControl(type, EditProperty.COLOR))
-        if (spec.shape && supports(type, EditProperty.SHAPE)) add(defaultControl(type, EditProperty.SHAPE))
-        if (spec.font && supports(type, EditProperty.FONT)) add(defaultControl(type, EditProperty.FONT))
-        if (spec.size && supports(type, EditProperty.SCALE)) {
-            add(defaultControl(type, EditProperty.SCALE).copy(range = spec.sizeRange))
-        }
-        if (spec.move) {
-            // 注册表决定"位置"用哪种语义：二维码/组合是枚举锚点，其余是连续偏移
-            if (type == ElementType.QRCODE || type == ElementType.GROUP) {
-                add(defaultControl(type, EditProperty.PLACEMENT))
-            } else {
-                add(defaultControl(type, EditProperty.OFFSET_X).copy(range = listOf(-spec.moveRange, spec.moveRange)))
-                add(defaultControl(type, EditProperty.OFFSET_Y).copy(range = listOf(-spec.moveRange, spec.moveRange)))
-            }
-        }
     }
 }

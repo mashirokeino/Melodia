@@ -21,20 +21,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CropSquare
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -208,7 +213,11 @@ fun EditSheet(
                             horizontalArrangement = Arrangement.spacedBy(tokens.spacingSm),
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                         ) {
-                            val shapes = spec.shapes.ifEmpty { listOf(ImageShape.ROUNDED, ImageShape.RECT, ImageShape.CIRCLE) }
+                            // 形状可选项也由皮肤在控件里声明；没写给三种常规值
+                            val shapes = control.options
+                                .map { ImageShape.from(it) }
+                                .filter { it != ImageShape.DEFAULT }
+                                .ifEmpty { listOf(ImageShape.ROUNDED, ImageShape.RECT, ImageShape.CIRCLE) }
                             // 用户没选过时，把"皮肤声明的形状"显示成选中项（否则圆形封面看起来一个都没选）
                             val declared = declaredShape(owner)
                             val effective = if (state.shape != ImageShape.DEFAULT) state.shape else declared
@@ -225,6 +234,8 @@ fun EditSheet(
                     ControlKind.SLIDER -> {
                         // 兜底区间按属性给：位置是正负对称的，尺寸倍数必须为正
                         val range = control.range.takeIf { it.size >= 2 } ?: defaultRangeOf(control.property)
+                        // 颗粒度：皮肤声明优先（0 = 连续），否则按 1%
+                        val step = control.step ?: SLIDER_STEP
                         val value = when (control.property) {
                             EditProperty.OFFSET_X -> state.offsetX
                             EditProperty.OFFSET_Y -> state.offsetY
@@ -234,6 +245,7 @@ fun EditSheet(
                             label = control.label ?: "大小",
                             value = value,
                             range = range[0]..range[1],
+                            step = step,
                             valueText = "${(value * 100).toInt()}%",
                             onValueChange = { picked ->
                                 onChange(
@@ -308,6 +320,33 @@ fun EditSheet(
                                     )
                                 },
                             )
+                        }
+                    }
+
+                    ControlKind.TEXT -> {
+                        SectionLabel(control.label ?: "文字")
+                        var value by remember(state.text) { mutableStateOf(state.text.orEmpty()) }
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { input ->
+                                value = input
+                                // 空串 = 回到皮肤声明的文字
+                                onChange(state.copy(text = input.ifBlank { null }))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 6,
+                            textStyle = LyricShareTextStyles.body(tokens),
+                            placeholder = {
+                                Text(
+                                    control.hint ?: "可用：{title} {artists} {album} {lines}",
+                                    style = LyricShareTextStyles.label(tokens),
+                                )
+                            },
+                        )
+                        if (!control.hint.isNullOrBlank()) {
+                            Spacer(Modifier.height(tokens.spacingXs))
+                            Text(control.hint, style = LyricShareTextStyles.label(tokens))
                         }
                     }
 
@@ -474,13 +513,15 @@ private fun SliderRow(
     range: ClosedFloatingPointRange<Float>,
     valueText: String,
     onValueChange: (Float) -> Unit,
+    /** 每一格的值（由皮肤声明）；0 或负数 = 连续，不吸附。 */
+    step: Float = SLIDER_STEP,
 ) {
     val tokens = LocalLyricShareTokens.current
     val haptics = LocalHapticFeedback.current
     val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
-    // 1% 一档；上限 400 档是防止极端区间让 Slider 画满刻度
-    val stepCount = (span / SLIDER_STEP).roundToInt().coerceIn(1, 400)
-    val snapped = snapToStep(value, range.start, span, stepCount)
+    // 档数：按皮肤声明的颗粒度算；0/负数 = 连续（不吸附、不画档位点）
+    val stepCount = if (step > 0f) (span / step).roundToInt().coerceIn(1, 400) else 0
+    val snapped = if (stepCount > 0) snapToStep(value, range.start, span, stepCount) else value
     // 记录"上一格"，每跨过一格震一下（同一格内连续拖动不重复震）
     var lastTick by remember { mutableStateOf(snapped) }
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -491,7 +532,7 @@ private fun SliderRow(
         Slider(
             value = snapped,
             onValueChange = { raw ->
-                val next = snapToStep(raw, range.start, span, stepCount)
+                val next = if (stepCount > 0) snapToStep(raw, range.start, span, stepCount) else raw
                 if (next != lastTick) {
                     lastTick = next
                     // 一格一震：用系统触觉反馈（无需 VIBRATE 权限）
