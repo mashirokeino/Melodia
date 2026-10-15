@@ -4,7 +4,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 // 平滑抗色阶断层的垂直渐变
 // 采用余弦缓动曲线采样，首尾斜率平滑过渡；透明渐变保留原色相避免发灰
@@ -53,6 +57,110 @@ fun Color.darken(amount: Float): Color {
     android.graphics.Color.RGBToHSV((red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt(), hsv)
     hsv[2] = (hsv[2] * (1f - amount)).coerceIn(0f, 1f)
     return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
+
+
+private const val RAD_TO_DEG = (180.0 / PI).toFloat()
+private const val DEG_TO_RAD = (PI / 180.0).toFloat()
+
+private fun cbrt(x: Float): Float =
+    if (x < 0f) -(-x).pow(1f / 3f) else x.pow(1f / 3f)
+
+private fun srgbToLinear(c: Float): Float =
+    if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
+
+private fun linearToSrgb(c: Float): Float =
+    if (c <= 0.0031308f) 12.92f * c else 1.055f * c.pow(1f / 2.4f) - 0.055f
+
+/** Color -> [L (0..1), C (>=0), H (0..360)] */
+fun Color.toOklch(): FloatArray {
+    val r = srgbToLinear(red)
+    val g = srgbToLinear(green)
+    val b = srgbToLinear(blue)
+
+    val l = cbrt(0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b)
+    val m = cbrt(0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b)
+    val s = cbrt(0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b)
+
+    val L = 0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s
+    val a = 1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s
+    val bb = 0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s
+
+    val c = sqrt(a * a + bb * bb)
+    val h = ((atan2(bb, a) * RAD_TO_DEG) % 360f + 360f) % 360f
+    return floatArrayOf(L, c, h)
+}
+
+/** OKLCH -> 线性 sRGB（可能超出 0..1） */
+private fun oklchToLinearRgb(L: Float, C: Float, H: Float): FloatArray {
+    val hr = H * DEG_TO_RAD
+    val a = C * cos(hr)
+    val b = C * sin(hr)
+
+    val l = (L + 0.3963377774f * a + 0.2158037573f * b).let { it * it * it }
+    val m = (L - 0.1055613458f * a - 0.0638541728f * b).let { it * it * it }
+    val s = (L - 0.0894841775f * a - 1.2914855480f * b).let { it * it * it }
+
+    return floatArrayOf(
+        +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s,
+        -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s,
+        -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s
+    )
+}
+
+private fun FloatArray.inGamut(eps: Float = 1e-4f) =
+    all { it >= -eps && it <= 1f + eps }
+
+/** 从 OKLCH 构建 Color；超出色域时保持 L、H，只收缩 C（而不是裁剪通道） */
+fun Color.Companion.fromOklch(L: Float, C: Float, H: Float, alpha: Float = 1f): Color {
+    val l = L.coerceIn(0f, 1f)
+    val c0 = C.coerceAtLeast(0f)
+    var rgb = oklchToLinearRgb(l, c0, H)
+
+    if (!rgb.inGamut()) {
+        var lo = 0f
+        var hi = c0
+        repeat(20) {
+            val mid = (lo + hi) / 2f
+            if (oklchToLinearRgb(l, mid, H).inGamut()) lo = mid else hi = mid
+        }
+        rgb = oklchToLinearRgb(l, lo, H)
+    }
+
+    return Color(
+        red = linearToSrgb(rgb[0].coerceIn(0f, 1f)),
+        green = linearToSrgb(rgb[1].coerceIn(0f, 1f)),
+        blue = linearToSrgb(rgb[2].coerceIn(0f, 1f)),
+        alpha = alpha.coerceIn(0f, 1f)
+    )
+}
+
+/**
+ * 基于 OKLCH 感知均匀色彩空间的干净减暗。
+ * 相比传统的 HSV 明度直接乘以系数，OKLCH 保证在降低感知明度 L 的同时，
+ * 色相 H 不发生偏移，并支持保持或补偿色度 C，避免暗部发灰、发脏。
+ *
+ * @param amount 0..1，越大越暗
+ * @param chromaKeep amount = 1 时的色度倍率（1 = 保持原色度，>1 = 略微增饱和补偿暗处视觉衰减）
+ * @param hueShift amount = 1 时的色相偏移（度），传 0 关闭
+ */
+fun Color.darkenOklch(
+    amount: Float,
+    chromaKeep: Float = 1.0f,
+    hueShift: Float = 0f
+): Color {
+    val t = amount.coerceIn(0f, 1f)
+    if (t == 0f) return this
+
+    val lch = toOklch()
+    val chromaScale = 1f + (chromaKeep - 1f) * t
+    return Color.fromOklch(
+        L = lch[0] * (1f - t),
+        C = lch[1] * chromaScale.coerceAtLeast(0f),
+        H = lch[2] + hueShift * t,
+        alpha = alpha
+    )
 }
 
 // HSV 饱和度按比例往纯色方向推；原色饱和度为 0（灰阶/黑白）时色相无意义，直接跳过，

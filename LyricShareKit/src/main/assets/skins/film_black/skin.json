@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "minEngineVersion": 1,
+  "id": "film_black",
+  "name": "胶片黑",
+  "canvas": {
+    "width": 1080,
+    "height": null,
+    "padding": {
+      "left": 0,
+      "top": 0,
+      "right": 72,
+      "bottom": 96
+    },
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#161616",
+        "#000000"
+      ],
+      "angle": 0,
+      "editable": {
+        "id": "background",
+        "order": 2,
+        "label": "背景",
+        "controls": [
+          {
+            "property": "source",
+            "control": "image",
+            "label": "从相册选择"
+          },
+          {
+            "property": "visible",
+            "control": "switch",
+            "label": "显示背景"
+          },
+          {
+            "property": "background",
+            "control": "color",
+            "label": "纯色背景",
+            "allowTransparent": true
+          },
+          {
+            "property": "scale",
+            "control": "slider",
+            "label": "缩放",
+            "range": [
+              1.0,
+              2.0
+            ]
+          },
+          {
+            "property": "offset_x",
+            "control": "slider",
+            "label": "水平位置",
+            "range": [
+              -0.3,
+              0.3
+            ]
+          },
+          {
+            "property": "offset_y",
+            "control": "slider",
+            "label": "垂直位置",
+            "range": [
+              -0.3,
+              0.3
+            ]
+          }
+        ]
+      }
+    },
+    "songInfo": {
+      "mode": "besideQr"
+    }
+  },
+  "defaults": {
+    "color": "#E6E6E6",
+    "size": 42,
+    "lineSpacing": 30,
+    "align": "left",
+    "editable": {
+      "id": "text",
+      "order": 3,
+      "label": "字体",
+      "controls": [
+        {
+          "property": "font",
+          "control": "font",
+          "label": "字体"
+        },
+        {
+          "property": "color",
+          "control": "color",
+          "label": "字体颜色"
+        }
+      ]
+    }
+  },
+  "elements": [
+    {
+      "type": "image",
+      "role": "cover",
+      "useCover": true,
+      "width": 1080,
+      "height": 1080,
+      "x": 0,
+      "scaleType": "centerCrop",
+      "scrim": {
+        "color": "#000000",
+        "opacity": 0.25
+      },
+      "editable": {
+        "id": "cover",
+        "order": 1,
+        "label": "封面",
+        "controls": [
+          {
+            "property": "source",
+            "control": "image",
+            "label": "从相册选择"
+          },
+          {
+            "property": "visible",
+            "control": "switch",
+            "label": "显示封面"
+          },
+          {
+            "property": "shape",
+            "control": "shape",
+            "label": "形状"
+          },
+          {
+            "property": "scale",
+            "control": "slider",
+            "label": "大小",
+            "range": [
+              0.6,
+              1.4
+            ]
+          },
+          {
+            "property": "offset_x",
+            "control": "slider",
+            "label": "水平位置",
+            "range": [
+              -0.25,
+              0.25
+            ]
+          },
+          {
+            "property": "offset_y",
+            "control": "slider",
+            "label": "垂直位置",
+            "range": [
+              -0.25,
+              0.25
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "role": "title",
+      "text": "{title}",
+      "size": 56,
+      "color": "#FFFFFF",
+      "x": 72,
+      "marginTop": 56
+    },
+    {
+      "type": "text",
+      "role": "artists",
+      "text": "{artists}",
+      "size": 30,
+      "color": "#FFFFFF",
+      "x": 72,
+      "marginTop": 12
+    },
+    {
+      "type": "lyric",
+      "size": 42,
+      "color": "#E6E6E6",
+      "x": 72,
+      "lineSpacing": 32,
+      "marginTop": 48
+    },
+    {
+      "type": "qrcode",
+      "width": 140,
+      "height": 140,
+      "x": "right",
+      "marginRight": 0,
+      "marginTop": 72,
+      "color": "#000000",
+      "qr": {
+        "errorCorrection": "M",
+        "quietZone": 0,
+        "backgroundColor": "#FFFFFF"
+      },
+      "editable": {
+        "id": "qr",
+        "order": 4,
+        "label": "二维码",
+        "controls": [
+          {
+            "property": "visible",
+            "control": "switch",
+            "label": "显示二维码"
+          },
+          {
+            "property": "placement",
+            "control": "enum",
+            "label": "放置位置",
+            "options": [
+              "skin",
+              "left",
+              "center",
+              "right"
+            ]
+          },
+          {
+            "property": "color",
+            "control": "color",
+            "label": "二维码颜色"
+          },
+          {
+            "property": "background",
+            "control": "color",
+            "label": "底色",
+            "allowTransparent": true
+          },
+          {
+            "property": "scale",
+            "control": "slider",
+            "label": "大小",
+            "range": [
+              0.5,
+              2.0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

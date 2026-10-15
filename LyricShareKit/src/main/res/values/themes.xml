@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compose 页面只需要一个"无 ActionBar、深色底"的宿主主题。
+  刻意不用 Theme.MaterialComponents.*：本模块不依赖 Material Components 的 XML 主题，
+  避免给宿主增加额外依赖；真正的外观全部由 Compose 侧的 LyricShareTokens 控制。
+
+  状态栏 / 导航栏：
+   · 两个 bar 都设为透明，让页面内容铺到状态栏下面（Activity 里还会再调 enableEdgeToEdge 强制一次）；
+   · windowBackground 用页面底色而不是纯黑，避免"页面是 #101014、状态栏却是 #000"的色块接缝，
+     Activity 冷启动的第一帧也不会闪黑；
+   · windowLightStatusBar=false：深色底配浅色图标。
+-->
+<resources>
+    <style name="Theme.LyricShare" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ls_surface</item>
+        <item name="android:colorBackground">@color/ls_surface</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

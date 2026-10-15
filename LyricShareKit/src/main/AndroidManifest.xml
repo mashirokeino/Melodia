@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      保存到相册：API 29+ 走 MediaStore 的 RELATIVE_PATH，无需任何权限；
+      API 26~28 仍需要写外部存储，页面会在真正保存前动态申请（maxSdkVersion 限定不影响新系统）。
+    -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <application>
+
+        <!--
+          歌词图片生成页。
+          · exported=false：只允许 App 内部（播放页/歌词页）拉起；
+          · theme 使用本模块自带的 @style/Theme.LyricShare，接入方无需改全局主题；
+          · screenOrientation 不给死，跟随宿主（竖屏海报一般只支持竖屏，可按需锁定 portrait）。
+          另外 launchMode 用 singleTop，避免连点分享按钮叠出多个页面。
+        -->
+        <activity
+            android:name="com.music.lyricshare.LyricShareImageActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.LyricShare"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout" />
+
+        <!--
+          分享时把生成的 PNG 写到 cacheDir/lyric_share/，再用 FileProvider 授权给微信/系统分享面板。
+          authority 固定为 "<applicationId>.lyricshare.fileprovider"，代码里用 packageName 动态拼，
+          所以接入方不需要在 gradle 里配任何 manifestPlaceholders。
+        -->
+        <provider
+            android:name="com.music.lyricshare.LyricShareFileProvider"
+            android:authorities="${applicationId}.lyricshare.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/lyric_share_file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

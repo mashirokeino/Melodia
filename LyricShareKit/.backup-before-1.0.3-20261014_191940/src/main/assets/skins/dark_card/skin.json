@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "minEngineVersion": 1,
+  "id": "dark_card",
+  "name": "暗夜卡",
+  "canvas": {
+    "width": 1080,
+    "height": null,
+    "minHeight": 1560,
+    "padding": { "left": 72, "top": 64, "right": 72, "bottom": 64 },
+    "background": {
+      "type": "image",
+      "useCover": true,
+      "blur": 48,
+      "scrim": { "color": "#000000", "opacity": 0.7 },
+      "scaleType": "centerCrop",
+      "editable": {
+        "label": "背景",
+        "replace": true,
+        "visibility": true,
+        "size": true,
+        "sizeRange": [1.0, 2.2],
+        "move": true,
+        "moveRange": 0.3
+      }
+    }
+  },
+  "defaults": {
+    "color": "#F2F2F2",
+    "size": 42,
+    "lineSpacing": 32,
+    "align": "center"
+  },
+  "elements": [
+    { "type": "spacer", "height": 32 },
+    {
+      "type": "image",
+      "role": "cover",
+      "useCover": true,
+      "width": 420,
+      "height": 420,
+      "x": "center",
+      "circle": true,
+      "shadow": { "radius": 28, "dy": 10, "color": "#000000", "opacity": 0.4 },
+      "editable": {
+        "label": "封面",
+        "replace": true,
+        "visibility": true,
+        "shape": true,
+        "shapes": ["circle", "rounded", "rect"],
+        "size": true,
+        "sizeRange": [0.6, 1.4],
+        "move": true,
+        "moveRange": 0.25
+      }
+    },
+    {
+      "type": "text",
+      "text": "{title}",
+      "size": 48,
+      "color": "#FFFFFF",
+      "align": "center",
+      "maxLines": 1,
+      "marginTop": 48
+    },
+    {
+      "type": "text",
+      "text": "{artists}",
+      "size": 30,
+      "color": "#B8B8B8",
+      "align": "center",
+      "maxLines": 1,
+      "marginTop": 10
+    },
+    {
+      "type": "lyric",
+      "size": 42,
+      "color": "#F0F0F0",
+      "align": "center",
+      "lineSpacing": 34,
+      "maxLines": 12,
+      "marginTop": 64
+    },
+    {
+      "type": "qrcode",
+      "width": 132,
+      "height": 132,
+      "x": "center",
+      "marginTop": 72,
+      "qr": {
+        "errorCorrection": "Q",
+        "quietZone": 1,
+        "backgroundColor": "#FFFFFF"
+      }
+    }
+  ]
+}

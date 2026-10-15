@@ -25,5 +25,7 @@ dependencyResolutionManagement {
 rootProject.name = "Melodia"
 include(":app")
 include(":shared")
+include(":lyricshare")
+project(":lyricshare").projectDir = file("LyricShareKit")
  
 include(":desktopApp")

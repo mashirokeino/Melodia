@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "minEngineVersion": 1,
+  "id": "default_light",
+  "name": "默认白",
+  "canvas": {
+    "width": 1080,
+    "height": null,
+    "minHeight": 1440,
+    "padding": { "left": 72, "top": 96, "right": 72, "bottom": 72 },
+    "background": {
+      "type": "color",
+      "color": "#FFFFFF",
+      "editable": {
+        "label": "背景",
+        "replace": true,
+        "visibility": false,
+        "size": true,
+        "sizeRange": [1.0, 2.0],
+        "move": true,
+        "moveRange": 0.3
+      }
+    }
+  },
+  "defaults": {
+    "color": "#1A1A1A",
+    "size": 44,
+    "lineSpacing": 30,
+    "letterSpacing": 0,
+    "align": "left"
+  },
+  "elements": [
+    {
+      "type": "image",
+      "role": "cover",
+      "useCover": true,
+      "width": 936,
+      "height": 936,
+      "x": "center",
+      "cornerRadius": 24,
+      "shadow": { "radius": 20, "dx": 0, "dy": 8, "color": "#000000", "opacity": 0.15 },
+      "editable": {
+        "label": "封面",
+        "replace": true,
+        "visibility": true,
+        "shape": true,
+        "shapes": ["rounded", "rect", "circle"],
+        "size": true,
+        "sizeRange": [0.6, 1.4],
+        "move": true,
+        "moveRange": 0.25
+      }
+    },
+    {
+      "type": "text",
+      "text": "{title}",
+      "size": 52,
+      "color": "#111111",
+      "maxLines": 1,
+      "marginTop": 48
+    },
+    {
+      "type": "text",
+      "text": "{artists}",
+      "size": 34,
+      "color": "#8A8A8A",
+      "maxLines": 1,
+      "marginTop": 12
+    },
+    {
+      "type": "lyric",
+      "size": 44,
+      "color": "#333333",
+      "lineSpacing": 30,
+      "maxLines": 14,
+      "marginTop": 44
+    },
+    {
+      "type": "qrcode",
+      "width": 156,
+      "height": 156,
+      "x": "center",
+      "marginTop": 56,
+      "color": "#111111",
+      "qr": {
+        "errorCorrection": "M",
+        "quietZone": 0,
+        "backgroundColor": "#FFFFFF"
+      }
+    }
+  ]
+}

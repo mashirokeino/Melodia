@@ -7,7 +7,12 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.request.crossfade
+import coil3.toBitmap
+import com.music.lyricshare.LyricShareConfig
+import com.music.lyricshare.LyricShareKit
 import com.lin0721.linmusic.core.download.DownloadWorkerFactory
 import com.lin0721.linmusic.core.AppEnvironment
 import com.lin0721.linmusic.core.log.AppLogger
@@ -76,6 +81,19 @@ class MelodiaApplication : Application() {
         SingletonImageLoader.setSafe { imageLoader }
         // 在后台线程强制触发 DiskLruCache.initialize()，避免首次图片加载时锁竞争
         Thread { imageLoader.diskCache }.start()
+
+        // ── 歌词图片分享（LyricShareKit）─────────────────────────────────────────
+        LyricShareKit.install(this)
+        LyricShareConfig.galleryAlbumName = "Melodia"          // 存到 Pictures/Melodia/
+        LyricShareConfig.shareTextProvider = { "「${it.title}」— ${it.artists}" }
+        // 专辑封面通常是 http URL：模块不内置图片库，用工程已有的 Coil 取图
+        LyricShareConfig.coverLoader = { context, url ->
+            runCatching {
+                SingletonImageLoader.get(context)
+                    .execute(ImageRequest.Builder(context).data(url).allowHardware(false).build())
+                    .image?.toBitmap()
+            }.getOrNull()
+        }
 
         startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.ERROR)

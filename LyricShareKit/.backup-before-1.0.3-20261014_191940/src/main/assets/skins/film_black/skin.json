@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "minEngineVersion": 1,
+  "id": "film_black",
+  "name": "胶片黑",
+  "canvas": {
+    "width": 1080,
+    "height": null,
+    "minHeight": 1680,
+    "padding": { "left": 0, "top": 0, "right": 0, "bottom": 0 },
+    "background": {
+      "type": "gradient",
+      "colors": ["#161616", "#000000"],
+      "angle": 0,
+      "editable": {
+        "label": "背景",
+        "replace": true,
+        "visibility": false,
+        "size": true,
+        "sizeRange": [1.0, 2.2],
+        "move": true,
+        "moveRange": 0.3
+      }
+    }
+  },
+  "defaults": {
+    "color": "#E6E6E6",
+    "size": 42,
+    "lineSpacing": 30,
+    "align": "left"
+  },
+  "elements": [
+    {
+      "type": "image",
+      "role": "cover",
+      "useCover": true,
+      "width": 1080,
+      "height": 1080,
+      "x": 0,
+      "scaleType": "centerCrop",
+      "scrim": { "color": "#000000", "opacity": 0.25 },
+      "editable": {
+        "label": "封面",
+        "replace": true,
+        "visibility": true,
+        "shape": false,
+        "size": true,
+        "sizeRange": [0.6, 1.4],
+        "move": true,
+        "moveRange": 0.25
+      }
+    },
+    {
+      "type": "text",
+      "text": "{title}",
+      "size": 56,
+      "color": "#FFFFFF",
+      "x": 72,
+      "maxLines": 1,
+      "marginTop": 56
+    },
+    {
+      "type": "text",
+      "text": "{artists}",
+      "size": 30,
+      "color": "#BFBFBF",
+      "x": 72,
+      "maxLines": 1,
+      "marginTop": 12
+    },
+    {
+      "type": "lyric",
+      "size": 42,
+      "color": "#E6E6E6",
+      "x": 72,
+      "width": 720,
+      "lineSpacing": 32,
+      "maxLines": 10,
+      "marginTop": 48
+    },
+    {
+      "type": "qrcode",
+      "width": 140,
+      "height": 140,
+      "x": "right",
+      "marginRight": 72,
+      "marginTop": 72,
+      "color": "#000000",
+      "qr": {
+        "errorCorrection": "M",
+        "quietZone": 0,
+        "backgroundColor": "#FFFFFF"
+      }
+    }
+  ]
+}

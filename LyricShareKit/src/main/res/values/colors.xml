@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  页面底色（与 Compose 侧 LyricShareTokens.Default.surface 保持一致）。
+  放在资源里是为了让 windowBackground 也用同一个值：
+  这样状态栏/导航栏区域、以及 Activity 启动首帧都不会出现"纯黑色块"与页面底色的接缝。
+-->
+<resources>
+    <color name="ls_surface">#FF101014</color>
+</resources>
