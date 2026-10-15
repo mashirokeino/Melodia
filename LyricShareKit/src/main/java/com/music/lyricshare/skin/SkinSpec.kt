@@ -297,6 +297,9 @@ data class ControlSpec(
     val step: Float? = null,
     /** TEXT 的输入提示（写清楚这个位置能填什么，例如可用参数）。 */
     val hint: String? = null,
+    /** TEXT 输入框的最小/最大行数（**文本框大小由皮肤声明**）。不写按 2 / 6。 */
+    val minLines: Int = 2,
+    val maxLines: Int = 6,
     /** ENUM 的可选项（`left` / `center` / `right` / `top` / `bottom` / `skin`…）。 */
     val options: List<String> = emptyList(),
     /** COLOR：是否给一个"透明"档。 */

@@ -95,6 +95,7 @@ import com.music.lyricshare.skin.FontSpec
 import com.music.lyricshare.skin.ImageShape
 import com.music.lyricshare.skin.LoadedSkin
 import com.music.lyricshare.skin.SkinEditable
+import com.music.lyricshare.skin.SkinElement
 import com.music.lyricshare.skin.editables
 import com.music.lyricshare.skin.SkinSource
 import com.music.lyricshare.toast
@@ -178,6 +179,25 @@ private suspend fun <T> runCatchingNoCancel(block: suspend () -> T): Result<T> =
     throw cancellation
 } catch (throwable: Throwable) {
     Result.failure(throwable)
+}
+
+/** 文字里出现这些就说明用到了时间参数，需要每秒刷新。 */
+private val CLOCK_TOKEN = Regex(
+    "\\{(date|time|YYYY|YY|MM|dd|HH|hh|mm|ss)\\}" +
+        "|(?<![A-Za-z0-9])(YYYY|YY|MM|dd|HH|hh|mm|ss)(?![A-Za-z0-9])",
+)
+
+/** 这套皮肤 + 用户当前输入里是否用到了时间参数（递归含组合子元素）。 */
+private fun skinUsesClock(skin: LoadedSkin?, edits: Map<String, EditState>): Boolean {
+    val spec = skin?.spec ?: return false
+    fun walk(elements: List<SkinElement>, prefix: List<Int>): Boolean = elements.withIndex().any { (i, el) ->
+        val userText = edits[(prefix + i).joinToString(".")]?.text
+        val template = userText ?: el.text
+        (template != null && CLOCK_TOKEN.containsMatchIn(template)) ||
+            walk(el.children, prefix + i)
+    }
+    return walk(spec.elements, emptyList()) ||
+        (edits.values.any { it.text?.let { t -> CLOCK_TOKEN.containsMatchIn(t) } == true })
 }
 
 /** 用户调整写盘的防抖时长：连续拖动只在停下来之后写一次。 */
@@ -314,7 +334,22 @@ fun LyricShareImageScreen(
 
     /** 用户换过图的封面优先；否则用播放器给的专辑图。 */
     val effectiveCover = coverEdit.bitmap ?: albumCover
-    val data = remember(request, effectiveCover) { LyricShareData.from(request, effectiveCover) }
+
+    // ---------------- 时间参数：只有"用到了 YYYY/MM/dd/HH/hh/mm/ss/{time}"时才每秒刷新 ----------------
+    val usesClock = remember(selectedSkin, edits) { skinUsesClock(selectedSkin, edits) }
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(usesClock) {
+        if (!usesClock) return@LaunchedEffect
+        while (true) {
+            // 对齐到整秒，秒数跳变更利落
+            delay(1000 - System.currentTimeMillis() % 1000)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+
+    val data = remember(request, effectiveCover, nowMillis) {
+        LyricShareData.from(request, effectiveCover).copy(timestampMillis = nowMillis)
+    }
 
     /** 入口列表：一项一个 chip，图标按承载物类型给（纯 UI 装饰，皮肤不用关心）。 */
     val editEntries: List<EditEntry> = remember(editables, qrContent) {
@@ -340,6 +375,8 @@ fun LyricShareImageScreen(
     val renderInputs = listOf<Any?>(
         selectedSkin?.id, exportWidth, effectiveCover, elementEdits, backgroundEdit,
         textEdit, showQrCode, coverResolved,
+        // 用到了时间参数才带上时钟，否则不因它触发重渲染
+        if (usesClock) nowMillis else 0L,
     )
 
     /**
@@ -371,6 +408,7 @@ fun LyricShareImageScreen(
     LaunchedEffect(
         selectedSkin?.id, exportWidth, effectiveCover, elementEdits, backgroundEdit,
         textEdit, showQrCode, coverResolved,
+        if (usesClock) nowMillis else 0L,
     ) {
         val skin = selectedSkin ?: return@LaunchedEffect
         // 防抖：拖动滑杆时 key 每帧都在变，LaunchedEffect 会取消上一次 → 只在停下来后渲染一帧。
@@ -389,7 +427,8 @@ fun LyricShareImageScreen(
     }
 
     // 3) 皮肤缩略图：用真实歌曲数据渲染（用户看到的是自己的歌），算一次缓存住
-    LaunchedEffect(skins, data) {
+    // 注意：缩略图不跟"每秒的 data"走，否则每秒重画所有缩略图
+    LaunchedEffect(skins, effectiveCover) {
         if (skins.isEmpty()) return@LaunchedEffect
         val thumbs = withContext(Dispatchers.Default) {
             skins.associate { skin ->

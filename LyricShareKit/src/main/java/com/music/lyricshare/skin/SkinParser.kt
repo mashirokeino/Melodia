@@ -248,6 +248,8 @@ object SkinParser {
                 range = parseFloatRange(jo.optJSONArray("range"), emptyList()),
                 step = jo.optDoubleOrNull("step")?.toFloat()?.takeIf { it >= 0f },
                 hint = jo.optStringOrNull("hint"),
+                minLines = jo.optIntOrNull("minLines") ?: 2,
+                maxLines = jo.optIntOrNull("maxLines") ?: 6,
                 options = (jo.optJSONArray("options")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()),
                 allowTransparent = jo.optBoolean("allowTransparent", false),
                 allowNone = jo.optBoolean("allowNone", true),

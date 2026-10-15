@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Input
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.CropSquare
 import androidx.compose.material.icons.rounded.Download
@@ -324,7 +325,21 @@ fun EditSheet(
                     }
 
                     ControlKind.TEXT -> {
-                        SectionLabel(control.label ?: "文字")
+                        // 标题带一个"文字输入"图标（Icons.Rounded.Input，来自 material-icons-extended）
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.Input,
+                                contentDescription = null,
+                                tint = tokens.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(tokens.spacingXs))
+                            Text(
+                                control.label ?: "文字",
+                                style = LyricShareTextStyles.label(tokens),
+                            )
+                        }
+                        Spacer(Modifier.height(tokens.spacingXs))
                         var value by remember(state.text) { mutableStateOf(state.text.orEmpty()) }
                         OutlinedTextField(
                             value = value,
@@ -334,8 +349,9 @@ fun EditSheet(
                                 onChange(state.copy(text = input.ifBlank { null }))
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            maxLines = 6,
+                            // 输入框大小由皮肤声明（minLines / maxLines）
+                            minLines = control.minLines.coerceIn(1, 20),
+                            maxLines = maxOf(control.maxLines, control.minLines).coerceIn(1, 30),
                             textStyle = LyricShareTextStyles.body(tokens),
                             placeholder = {
                                 Text(
