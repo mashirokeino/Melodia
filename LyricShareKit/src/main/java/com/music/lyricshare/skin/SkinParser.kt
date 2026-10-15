@@ -243,7 +243,7 @@ object SkinParser {
                     shape = node.optBoolean("shape", true),
                     shapes = parseShapes(node.optJSONArray("shapes")),
                     size = node.optBoolean("size", true),
-                    sizeRange = parseFloatRange(node.optJSONArray("sizeRange"), EditableSpec.ALL.sizeRange),
+                    sizeRange = parseFloatRange(node.optJSONArray("sizeRange"), EditableSpec.ALL.sizeRange, positiveOnly = true),
                     move = node.optBoolean("move", true),
                     moveRange = node.optDouble("moveRange", 0.25).toFloat().coerceIn(0f, 0.5f),
                     color = node.optBoolean("color", false),
@@ -283,11 +283,25 @@ object SkinParser {
         return shapes.ifEmpty { EditableSpec.ALL.shapes }
     }
 
-    private fun parseFloatRange(arr: JSONArray?, fallback: List<Float>): List<Float> {
+    /**
+     * 解析 `[下界, 上界]`。
+     *
+     * **必须允许负的下界**：位置偏移是**正负可调**的（如 `[-0.25, 0.25]` = 左右各挪 1/4 画布）。
+     * 早先这里要求 `lo > 0`，把偏移区间整个丢掉、回落到默认区间，导致滑杆圆点在 0% 时贴左端
+     * 且拖动会给出 60%~140% 的错误偏移。
+     *
+     * @param positiveOnly 仅供"尺寸倍数"这类**必须为正**的区间用（下界会被抬到 0.01）。
+     */
+    private fun parseFloatRange(
+        arr: JSONArray?,
+        fallback: List<Float>,
+        positiveOnly: Boolean = false,
+    ): List<Float> {
         if (arr == null || arr.length() < 2) return fallback
         val lo = arr.optDouble(0).toFloat()
         val hi = arr.optDouble(1).toFloat()
-        return if (lo > 0f && hi > lo) listOf(lo, hi) else fallback
+        if (!lo.isFinite() || !hi.isFinite() || hi <= lo) return fallback
+        return if (positiveOnly) listOf(lo.coerceAtLeast(0.01f), hi) else listOf(lo, hi)
     }
 
     // ----------------------------------------------------------------- utils

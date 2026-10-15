@@ -216,7 +216,8 @@ fun EditSheet(
                     }
 
                     ControlKind.SLIDER -> {
-                        val range = control.range.takeIf { it.size >= 2 } ?: listOf(0.6f, 1.4f)
+                        // 兜底区间按属性给：位置是正负对称的，尺寸倍数必须为正
+                        val range = control.range.takeIf { it.size >= 2 } ?: defaultRangeOf(control.property)
                         val value = when (control.property) {
                             EditProperty.OFFSET_X -> state.offsetX
                             EditProperty.OFFSET_Y -> state.offsetY
@@ -371,6 +372,15 @@ private fun declaredShape(owner: EditableOwner): ImageShape = when (owner) {
         else -> ImageShape.RECT
     }
     else -> ImageShape.DEFAULT
+}
+
+/**
+ * 滑杆没有声明 `range` 时的兜底区间。
+ * 位置类**必须**是正负对称的（0 在中间），否则圆点会贴左端、拖动值也不对。
+ */
+private fun defaultRangeOf(property: EditProperty): List<Float> = when (property) {
+    EditProperty.OFFSET_X, EditProperty.OFFSET_Y -> listOf(-0.25f, 0.25f)
+    else -> listOf(0.6f, 1.4f)
 }
 
 /** 锚点选项的显示名。 */

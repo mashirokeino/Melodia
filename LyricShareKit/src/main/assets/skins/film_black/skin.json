@@ -133,10 +133,10 @@
           {
             "property": "scale",
             "control": "slider",
-            "label": "大小",
+            "label": "大小（最大 100%）",
             "range": [
               0.6,
-              1.4
+              1.0
             ]
           },
           {

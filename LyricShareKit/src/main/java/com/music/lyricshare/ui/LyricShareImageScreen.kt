@@ -179,6 +179,9 @@ private suspend fun <T> runCatchingNoCancel(block: suspend () -> T): Result<T> =
 /** 用户调整写盘的防抖时长：连续拖动只在停下来之后写一次。 */
 private const val PERSIST_DEBOUNCE_MS = 300L
 
+/** 预览重渲染的防抖时长：拖动时只在停下来后渲染一帧，避免每帧重画导致闪烁。 */
+private const val PREVIEW_DEBOUNCE_MS = 80L
+
 /**
  * ============================================================================
  *  歌词图片生成页
@@ -366,6 +369,9 @@ fun LyricShareImageScreen(
         textEdit, showQrCode, coverResolved,
     ) {
         val skin = selectedSkin ?: return@LaunchedEffect
+        // 防抖：拖动滑杆时 key 每帧都在变，LaunchedEffect 会取消上一次 → 只在停下来后渲染一帧。
+        // 期间继续显示上一张预览，所以画面是"跟手但不闪"。
+        delay(PREVIEW_DEBOUNCE_MS)
         rendering = true
         if (coverPending) return@LaunchedEffect        // 等封面，先不渲染（rendering 保持 true 显示进度）
         val result = runCatchingNoCancel {
@@ -724,8 +730,10 @@ private fun PreviewArea(
             else -> Text("正在准备预览…", style = LyricShareTextStyles.label(tokens))
         }
 
-        // 渲染/导出进度：半透明遮罩 + 环形进度（固定在可视区，不随海报滚动）
-        if (rendering || busy) {
+        // 进度提示分两种，避免"调一下就闪一下"：
+        //  · 还没有任何预览（首帧）→ 整屏遮罩 + 居中转圈；
+        //  · 已经有预览（改参数重渲染）→ 只在右上角放一个小转圈，画面继续显示上一张。
+        if ((rendering || busy) && preview == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -733,6 +741,21 @@ private fun PreviewArea(
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(color = tokens.onSurface, strokeWidth = 2.dp)
+            }
+        } else if (rendering || busy) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(tokens.spacingSm)
+                    .size(20.dp)
+                    .background(tokens.surfaceContainerHigh.copy(alpha = 0.7f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    color = tokens.onSurfaceVariant,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(14.dp),
+                )
             }
         }
     }
