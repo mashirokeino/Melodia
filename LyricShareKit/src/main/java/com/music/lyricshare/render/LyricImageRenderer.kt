@@ -75,12 +75,18 @@ data class EditState(
      * null = 用皮肤声明的 text；写进去的字符串仍支持占位符与日期时间参数。
      */
     val text: String? = null,
+    /**
+     * 用户文字的**出图行数上限**（超出显示省略号）。
+     * 由文本框控件声明的 `maxLines` 带入 —— 面板里输入框的高度和出图的行数上限是同一个声明。
+     * null = 用元素自己的 `maxLines`。
+     */
+    val textMaxLines: Int? = null,
     /** 二维码放置位置（仅二维码）。 */
     val placement: QrPlacement = QrPlacement.SKIN,
 ) {
     val isDefault: Boolean
         get() = bitmap == null && solidColor == null && color == null && font == null &&
-            text == null && visible && shape == ImageShape.DEFAULT && scale == 1f &&
+            text == null && textMaxLines == null && visible && shape == ImageShape.DEFAULT && scale == 1f &&
             offsetX == 0f && offsetY == 0f && placement == QrPlacement.SKIN
 
     companion object {
@@ -305,7 +311,9 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
                 val text = resolveText(el, data, edit)
                 if (text.isBlank()) return null                       // 空文本 = 这个元素不存在（不预留）
                 val paint = buildTextPaint(el, defaults, skin, options, scale, edit)
-                val layout = buildLayout(text, paint, width, el, defaults, scale)
+                // 出图行数上限：文本框控件声明的 maxLines 优先，其次元素自己的 maxLines
+                val maxLines = edit.textMaxLines ?: el.maxLines
+                val layout = buildLayout(text, paint, width, el, defaults, scale, maxLines)
                 Measured(el, edit, width, layout.height, layout)
             }
 
@@ -871,6 +879,8 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
         el: SkinElement,
         defaults: ElementDefaults,
         scale: Float,
+        /** 行数上限覆盖（null = 用 el.maxLines）。 */
+        maxLinesOverride: Int? = null,
     ): StaticLayout {
         val alignment = when (el.align ?: defaults.align) {
             HAlign.LEFT -> Layout.Alignment.ALIGN_NORMAL
@@ -883,7 +893,7 @@ class LyricImageRenderer(private val fontProvider: FontProvider) {
             .setLineSpacing((el.lineSpacing ?: defaults.lineSpacing) * scale, 1f)
             .setIncludePad(false)
         if (el.ellipsize) builder.setEllipsize(TextUtils.TruncateAt.END)
-        el.maxLines?.takeIf { it > 0 }?.let { builder.setMaxLines(it) }
+        (maxLinesOverride ?: el.maxLines)?.takeIf { it > 0 }?.let { builder.setMaxLines(it) }
         return builder.build()
     }
 

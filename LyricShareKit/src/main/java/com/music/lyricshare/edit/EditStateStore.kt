@@ -83,6 +83,7 @@ class EditStateStore(context: Context) {
         state.solidColor?.let { jo.put("solidColor", it) }
         state.color?.let { jo.put("color", it) }
         state.text?.let { jo.put("text", it) }
+        state.textMaxLines?.let { jo.put("textMaxLines", it) }
         jo.put("shape", state.shape.name)
         jo.put("scale", state.scale.toDouble())
         jo.put("offsetX", state.offsetX.toDouble())
@@ -140,6 +141,7 @@ class EditStateStore(context: Context) {
             offsetY = jo.optDouble("offsetY", 0.0).toFloat(),
             color = jo.optIntOrNull("color"),
             text = jo.optStringOrNull("text"),
+            textMaxLines = jo.optIntOrNull("textMaxLines"),
             font = font,
             placement = runCatching { ElementPlacement.valueOf(jo.optString("placement")) }
                 .getOrDefault(ElementPlacement.SKIN),

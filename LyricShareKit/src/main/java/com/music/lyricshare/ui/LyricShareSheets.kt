@@ -345,8 +345,14 @@ fun EditSheet(
                             value = value,
                             onValueChange = { input ->
                                 value = input
-                                // 空串 = 回到皮肤声明的文字
-                                onChange(state.copy(text = input.ifBlank { null }))
+                                // 空串 = 回到皮肤声明的文字；
+                                // 同时把控件声明的 maxLines 作为**出图行数上限**带进去（超出显示省略号）
+                                onChange(
+                                    state.copy(
+                                        text = input.ifBlank { null },
+                                        textMaxLines = control.maxLines.takeIf { it > 0 },
+                                    )
+                                )
                             },
                             modifier = Modifier.fillMaxWidth(),
                             // 输入框大小由皮肤声明（minLines / maxLines）
