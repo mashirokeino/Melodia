@@ -203,6 +203,9 @@ private fun skinUsesClock(skin: LoadedSkin?, edits: Map<String, EditState>): Boo
 /** 用户调整写盘的防抖时长：连续拖动只在停下来之后写一次。 */
 private const val PERSIST_DEBOUNCE_MS = 300L
 
+/** 用户调整后刷新"皮肤缩略图"的防抖时长。 */
+private const val THUMB_REFRESH_DEBOUNCE_MS = 600L
+
 /** 预览重渲染的防抖时长：拖动时只在停下来后渲染一帧，避免每帧重画导致闪烁。 */
 private const val PREVIEW_DEBOUNCE_MS = 80L
 
@@ -397,6 +400,37 @@ fun LyricShareImageScreen(
         textEdit = textEdit,
     )
 
+    /**
+     * **按某套皮肤自己的用户调整**构造渲染参数。
+     *
+     * 缩略图必须用各自那一份：否则在 A 皮肤里设了"跟随播放页"背景、换了封面之后，
+     * B/C 皮肤的缩略图也会被套上同样的背景与封面（所有缩略图长一个样）。
+     * 键是"元素路径 / background / text-defaults"，所以换皮肤也不会串。
+     */
+    fun optionsForSkin(skin: LoadedSkin, width: Int): RenderOptions {
+        val own = adjustmentsBySkin[skin.id].orEmpty()
+        val entries = skin.spec.editables
+        val elEdits = entries.mapNotNull { entry ->
+            (entry.owner as? EditableOwner.Element)?.let { it.key to (own[entry.id] ?: EditState()) }
+        }.toMap()
+        val bg = entries.firstOrNull { it.owner == EditableOwner.Background }
+            ?.let { own[it.id] ?: EditState() } ?: EditState()
+        val txt = entries.firstOrNull { it.owner == EditableOwner.TextDefaults }
+            ?.let { own[it.id] ?: EditState() } ?: EditState()
+        val qrVisible = entries
+            .firstOrNull { it.owner is EditableOwner.Element && it.owner.element.type == ElementType.QRCODE }
+            ?.let { own[it.id]?.visible } ?: true
+        return RenderOptions(
+            widthPx = width,
+            fontOverride = txt.font,
+            showQrCode = qrVisible && !qrContent.isNullOrBlank(),
+            showBrandElement = false,
+            elementEdits = elEdits,
+            backgroundEdit = bg,
+            textEdit = txt,
+        )
+    }
+
     // ---------------------------------------------------------------- 数据准备
     // 1) 解码播放器给的专辑封面（content Uri 直接解码；http 地址交给宿主注册的 coverLoader）
     LaunchedEffect(request.coverUri, request.coverUrl) {
@@ -427,13 +461,22 @@ fun LyricShareImageScreen(
     }
 
     // 3) 皮肤缩略图：用真实歌曲数据渲染（用户看到的是自己的歌），算一次缓存住
+    // 用户调整变化后，防抖 600ms 再刷新缩略图（拖动滑杆时不必每一帧都重画所有皮肤）
+    var thumbsVersion by remember { mutableStateOf(0) }
+    LaunchedEffect(adjustmentsBySkin.toMap(), selectedSkin?.id) {
+        delay(THUMB_REFRESH_DEBOUNCE_MS)
+        thumbsVersion++
+    }
+
     // 注意：缩略图不跟"每秒的 data"走，否则每秒重画所有缩略图
-    LaunchedEffect(skins, effectiveCover) {
+    LaunchedEffect(skins, effectiveCover, thumbsVersion) {
         if (skins.isEmpty()) return@LaunchedEffect
         val thumbs = withContext(Dispatchers.Default) {
             skins.associate { skin ->
-                // 单个皮肤渲染失败不影响其它皮肤；但协程取消必须抛出，否则会留下"半套缩略图"
-                skin.id to runCatchingNoCancel { renderer.render(skin, data, optionsFor(THUMB_WIDTH)) }.getOrNull()
+                // 每套皮肤用**它自己的**用户调整渲染；单个皮肤失败不影响其它皮肤，
+                // 但协程取消必须抛出，否则会留下"半套缩略图"
+                val options = optionsForSkin(skin, THUMB_WIDTH)
+                skin.id to runCatchingNoCancel { renderer.render(skin, data, options) }.getOrNull()
             }.mapNotNull { (id, bitmap) -> bitmap?.let { id to it } }.toMap()
         }
         skinPreviews = thumbs
