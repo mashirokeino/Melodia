@@ -185,32 +185,7 @@
               "text": "{title}",
               "size": 36,
               "color": "#FFFFFF",
-              "lineSpacing": 6,
-              "editable": {
-                "id": "title",
-                "order": 6,
-                "label": "歌名",
-                "controls": [
-                  {
-                    "property": "text",
-                    "control": "text",
-                    "label": "歌名",
-                    "hint": "可用 {title} {artists}；日期 YYYY/MM/dd HH:mm:ss",
-                    "minLines": 1,
-                    "maxLines": 3
-                  },
-                  {
-                    "property": "font",
-                    "control": "font",
-                    "label": "字体"
-                  },
-                  {
-                    "property": "color",
-                    "control": "color",
-                    "label": "字色"
-                  }
-                ]
-              }
+              "lineSpacing": 6
             },
             {
               "type": "text",
