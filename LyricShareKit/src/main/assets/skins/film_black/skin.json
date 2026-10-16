@@ -90,7 +90,8 @@
         {
           "property": "color",
           "control": "color",
-          "label": "字体颜色"
+          "label": "字体颜色",
+          "allowCustom": true
         }
       ]
     }
