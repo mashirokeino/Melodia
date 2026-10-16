@@ -40,7 +40,8 @@
             "property": "background",
             "control": "color",
             "label": "纯色背景",
-            "allowTransparent": true
+            "allowTransparent": true,
+            "allowCustom": true
           },
           {
             "property": "scale",
@@ -225,13 +226,15 @@
           {
             "property": "color",
             "control": "color",
-            "label": "二维码颜色"
+            "label": "二维码颜色",
+            "allowCustom": true
           },
           {
             "property": "background",
             "control": "color",
             "label": "底色",
-            "allowTransparent": true
+            "allowTransparent": true,
+            "allowCustom": true
           },
           {
             "property": "scale",

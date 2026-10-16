@@ -306,6 +306,8 @@ data class ControlSpec(
     val allowTransparent: Boolean = false,
     /** 是否允许"跟随皮肤"（第一张斜杠）。 */
     val allowNone: Boolean = true,
+    /** 颜色控件：是否在色卡行**最右边**给出"自选色"（HSL 取色盘）。 */
+    val allowCustom: Boolean = false,
 )
 
 data class EditableSpec(

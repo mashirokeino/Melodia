@@ -296,6 +296,8 @@ fun EditSheet(
                                 },
                             )
                         }
+                        // 自选色：色卡行最右边那个彩虹轮（皮肤写 allowCustom: true 才会出现）
+                        var customPickerOpen by remember(entry.id, control.property) { mutableStateOf(false) }
                         if (!transparent) {
                             SwatchRow(
                                 colors = if (control.property == EditProperty.BACKGROUND) {
@@ -319,6 +321,37 @@ fun EditSheet(
                                             state.copy(color = picked)
                                         }
                                     )
+                                },
+                                // 末尾追加"自选色"入口
+                                trailing = if (control.allowCustom) {
+                                    {
+                                        CustomColorSwatch(
+                                            selected = false,
+                                            onClick = { customPickerOpen = true },
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                        // HSL 取色盘：确定后写回同一个颜色属性（与预设色卡同路，因此同样会被持久化）
+                        if (customPickerOpen) {
+                            val isBackground = control.property == EditProperty.BACKGROUND
+                            ColorPickerDialog(
+                                title = if (isBackground) "自定义背景色" else "自定义颜色",
+                                initial = if (isBackground) state.solidColor else state.color,
+                                playerColor = playerColor,
+                                onDismiss = { customPickerOpen = false },
+                                onConfirm = { picked ->
+                                    onChange(
+                                        if (isBackground) {
+                                            state.copy(solidColor = picked, visible = true)
+                                        } else {
+                                            state.copy(color = picked)
+                                        }
+                                    )
+                                    customPickerOpen = false
                                 },
                             )
                         }
@@ -592,6 +625,8 @@ private fun SwatchRow(
     onSelect: (Int?) -> Unit,
     /** 播放页取色：作为第一张色卡（"跟随播放页"，圆环+水滴）。 */
     playerColor: Int? = null,
+    /** 末尾追加的一个槽位（例如"自选色"彩虹轮）。 */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val tokens = LocalLyricShareTokens.current
     Row(
@@ -606,7 +641,7 @@ private fun SwatchRow(
         playerColor?.let { color ->
             ColorSwatch(
                 color = color,
-                selected = selected == color,
+                selected = sameColor(selected, color),
                 icon = painterResource(R.drawable.ls_ic_droplet),
                 onClick = { onSelect(color) },
             )
@@ -614,10 +649,12 @@ private fun SwatchRow(
         colors.forEach { color ->
             ColorSwatch(
                 color = color,
-                selected = selected == color,
+                // 自选色往返 HSL 可能有 ±1 舍入，用容差比较
+                selected = sameColor(selected, color),
                 onClick = { onSelect(color) },
             )
         }
+        trailing?.invoke()
     }
 }
 

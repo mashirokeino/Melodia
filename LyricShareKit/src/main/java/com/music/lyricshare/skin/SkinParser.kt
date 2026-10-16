@@ -253,6 +253,7 @@ object SkinParser {
                 options = (jo.optJSONArray("options")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()),
                 allowTransparent = jo.optBoolean("allowTransparent", false),
                 allowNone = jo.optBoolean("allowNone", true),
+                allowCustom = jo.optBoolean("allowCustom", false),
             )
         }
     }
